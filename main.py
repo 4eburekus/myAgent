@@ -23,7 +23,8 @@ agent = Agent(
         "Ты — консольный ассистент. Правила:\n"
         "1. Используй инструмент 'calculate' для всех вычислений.\n"
         "2. Сохраняй результаты в 'manage_notes'.\n"
-        "3. Стиль: краткий и четкий."
+        "3. Перед вызовом инструмента кратко опиши, что ты собираешься сделать и почему.\n"
+        "4. Стиль: краткий и четкий."
     ),
     retries=2
 )
@@ -80,7 +81,7 @@ def get_weather(ctx: RunContext[AssistantDeps], city: str) -> str:
         return f"Сейчас в городе {city_name}: {temp}°C"
     except Exception as e:
         return f"Ошибка при получении погоды: {e}"
- 
+
 async def interactive_chat():
     deps = AssistantDeps()
     # Список для хранения истории переписки
@@ -96,26 +97,31 @@ async def interactive_chat():
 
         # message_history=history позволяет агенту помнить предыдущие реплики
         result = await agent.run(user_input, deps=deps, message_history=history)
-        # Трассировка вызовов инструментов
+        
         for msg in result.new_messages():
             if hasattr(msg, 'parts'):
                 for part in msg.parts:
-                    # Проверяем, является ли это вызовом инструмента (есть имя и аргументы)
+
+                    # Атрибут содержится в ModelResponse
+                    if hasattr(part, 'provider_details') and part.provider_details:
+                        raw_thoughts = part.provider_details.get('raw_content')
+                        if raw_thoughts:
+                            thoughts_text = "".join(raw_thoughts).strip()
+                            if thoughts_text:
+                                print("================================🧠БЛОК МЫСЛЕЙ🧠=====================================")
+                                print(thoughts_text)
+                                print("====================================================================================")
+                    # Пара атрибутов содержится в ModelResponse
                     if hasattr(part, 'tool_name') and hasattr(part, 'args'):
-                        print(f"🛠  Агент вызвал: {part.tool_name}({part.args})")
-                    # Проверяем, является ли это ответом инструмента (есть имя и контент)
-                    elif hasattr(part, 'tool_name') and hasattr(part, 'content'):
-                        print(f"📥 Инструмент [{part.tool_name}] вернул: {part.content}")
+                        print(f"🛠  ИСПОЛЬЗУЮ ИНСТРУМЕНТ: [{part.tool_name}] С ПАРАМЕТРАМИ: {part.args}")
+                    # Пара атрибутов содержится в ModelRequest
+                    if hasattr(part, 'tool_name') and hasattr(part, 'content'):
+                        print(f"📥 РЕЗУЛЬТАТ [{part.tool_name}]: {part.content}")
+
         # Обновляем историю сообщений (добавляем туда новый обмен репликами)
         history = result.all_messages()
-        # Вывод финального ответа
-        if hasattr(result, 'output'):
-            final_text = result.output
-        elif hasattr(result, 'data'):
-            final_text = result.data
-        else:
-            final_text = str(result)
-        print(f"ОТВЕТ:{final_text}\n")
+        print(f"ОТВЕТ:{result.output}\n")
+        
 
 async def main():
     with open("tasks.txt", "w", encoding="utf-8") as f:
