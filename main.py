@@ -4,6 +4,7 @@ import requests
 from typing import List, Optional
 from dataclasses import dataclass, field
 from pydantic_ai import Agent, RunContext
+import math
 
 # Указываем базовый URL LLM сервера
 os.environ["OPENAI_BASE_URL"] = "http://10.45.0.75:8000/v1"
@@ -22,7 +23,7 @@ agent = Agent(
     system_prompt=(
         "Ты — консольный ассистент. Правила:\n"
         "1. Используй инструмент 'calculate' для всех вычислений.\n"
-        "2. Сохраняй результаты в 'manage_notes'.\n"
+        "2. Сохраняй ключевую информацию из запросов пользователя, результаты своих размышлений и вычислений в 'agent_notes'.\n"
         "3. Перед вызовом инструмента кратко опиши, что ты собираешься сделать и почему.\n"
         "4. Стиль: краткий и четкий."
     ),
@@ -31,15 +32,26 @@ agent = Agent(
 
 @agent.tool
 def calculate(ctx: RunContext[AssistantDeps], expression: str) -> str:
-    """Математический калькулятор. Принимает строку (например: '2 + 2 * 2')."""
+    """Универсальный калькулятор для базовых математических операций. 
+    Поддерживает только базовые действия (+, -, *, /), возведение в степень (**)
+    и только функции модуля math.
+    Примеры: '2**10', 'math.sqrt(16)', '(15 + 7) * 3'."""
     try:
-        result = eval(expression, {"__builtins__": None}, {}) # eval исполняет строку как код Python
-        return f"Результат вычисления {expression}: {result}"
+        allowed_names = {k: v for k, v in math.__dict__.items() if not k.startswith("__")}
+        allowed_names['math'] = math
+        result = eval(expression, {"__builtins__": None}, allowed_names)
+        if isinstance(result, (int, float)):
+            # нужно ли округление
+            if isinstance(result, float):
+                # округляем до 4 знаков после точки
+                result = round(result, 4)
+            return f"Результат вычисления {expression}: {result}"
+        return f"Результат: {result}"
     except Exception as e:
-        return f"Ошибка в расчете: {e}"
+        return f"Ошибка в расчете: {str(e)}. Проверьте корректность синтаксиса."
 
 @agent.tool
-def manage_notes(ctx: RunContext[AssistantDeps], action: str, text: str = "") -> str:
+def agent_notes(ctx: RunContext[AssistantDeps], action: str, text: str = "") -> str:
     """Работа с заметками. 
     action: 'add' (чтобы сохранить текст) или 'list' (чтобы прочитать все)."""
     # ctx.deps — это доступ к объекту состояний
