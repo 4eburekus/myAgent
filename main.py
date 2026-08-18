@@ -78,6 +78,9 @@ def search_in_file(ctx: RunContext[AssistantDeps], filename: str, pattern: str) 
 def get_weather(ctx: RunContext[AssistantDeps], city: str) -> str:
     """Получает текущую температуру в заданном городе.
     Аргумент 'city': название города (например, 'Москва' или 'Tokyo')."""
+    if not city or not city.strip():
+        return "Ошибка: Название города не предоставлено. Пожалуйста, укажите название города."
+    city = city.strip()
     try:
         # получаем координаты города
         geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1&language=ru&format=json"
