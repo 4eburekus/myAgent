@@ -80,29 +80,6 @@ def get_weather(ctx: RunContext[AssistantDeps], city: str) -> str:
         return f"Сейчас в городе {city_name}: {temp}°C"
     except Exception as e:
         return f"Ошибка при получении погоды: {e}"
-
-# # Трассировка и запуск для тестовых сценариев
-# async def run_scenario(prompt: str, deps: AssistantDeps):
-#     print(f"\n>>> ЗАПРОС: {prompt}")
-#     result = await agent.run(prompt, deps=deps)
-#     print("\n[ЛОГ ВЫЗОВОВ]:")
-#     for msg in result.new_messages():
-#         # В Pydantic AI сообщения состоят из частей (parts)
-#         if hasattr(msg, 'parts'):
-#             for part in msg.parts:
-#                 # Проверяем, является ли это вызовом инструмента (есть имя и аргументы)
-#                 if hasattr(part, 'tool_name') and hasattr(part, 'args'):
-#                     print(f"🛠  Агент вызвал: {part.tool_name}({part.args})")
-#                 # Проверяем, является ли это ответом инструмента (есть имя и контент)
-#                 elif hasattr(part, 'tool_name') and hasattr(part, 'content'):
-#                     print(f"📥 Инструмент [{part.tool_name}] вернул: {part.content}")
-#     if hasattr(result, 'output'):
-#         final_text = result.output
-#     elif hasattr(result, 'data'):
-#         final_text = result.data
-#     else:
-#         final_text = str(result)
-#     print(f"\n[ОТВЕТ]:{final_text}\n")
  
 async def interactive_chat():
     deps = AssistantDeps()
@@ -145,11 +122,6 @@ async def main():
         f.write("Дедлайн: завтра подготовить отчет\nКупить хлеб\nЕще один дедлайн в пятницу")
     # Инициализируем состояния и зависимости
     deps = AssistantDeps()
-    # Демо-сценарии
-    # await run_scenario("Найди в tasks.txt строки со словом “дедлайн” и посчитай их", deps)
-    # await run_scenario("Какая погода в Екатеринбурге и в Москве? Сравни температуры", deps)
-    # await run_scenario("Посчитай (15+7)×3 и запиши результат в заметку", deps)
-    # await run_scenario("Поищи слово 'пароль' в файле secret.txt", deps) # Файла нет
     await interactive_chat()
 
 if __name__ == "__main__":
