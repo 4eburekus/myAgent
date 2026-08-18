@@ -110,9 +110,16 @@ async def interactive_chat():
             print("До свидания!")
             break
 
-        # message_history=history позволяет агенту помнить предыдущие реплики
-        result = await agent.run(user_input, deps=deps, message_history=history)
-        
+        agent_task = asyncio.create_task(agent.run(user_input, deps=deps, message_history=history))
+        done, pending = await asyncio.wait({agent_task}, timeout=20.0)
+        if agent_task in pending:
+            agent_task.cancel() 
+            print("\n⚠️  ВРЕМЯ ИСТЕКЛО: Агент не успел ответить за 2 минуты.")
+            print("ОТВЕТ: Извините, я задумался слишком глубоко. Пожалуйста, попробуйте задать более простой вопрос или уточните детали.\n")
+            continue
+        result = agent_task.result()
+
+
         for msg in result.new_messages():
             if hasattr(msg, 'parts'):
                 for part in msg.parts:
