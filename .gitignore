@@ -1,1 +1,19 @@
-/venv
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Виртуальное окружение
+.venv/
+/venv/
+
+# Chainlit
+.chainlit/.files/
+.chainlit/translations/*.json.bak
+
+# Логи
+*.log
+
+# IDE
+.idea/
+.vscode/
