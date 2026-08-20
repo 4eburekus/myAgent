@@ -49,6 +49,26 @@ def agent_notes(ctx: RunContext[AssistantDeps], action: str, text: str = "") -> 
         return f"Твои текущие заметки: {notes}"
     return "Ошибка: выбери 'add' или 'list'."
 
+
+@agent.tool
+def set_chat_title(ctx: RunContext[AssistantDeps], title: str) -> str:
+    """Сохраняет название чата. Вызови один раз в начале разговора, когда понял тему диалога.
+    Аргумент title: короткое название (3-6 слов), отражающее суть разговора."""
+    from config import get_db
+    db = get_db()
+    chat = db["chats"].find_one({"_id": ctx.deps.chat_id})
+    if not chat:
+        return "Ошибка: чат не найден."
+    # Не перетираем уже заданное название (в т.ч. переименованное вручную в админке)
+    current = chat.get("name") or ""
+    if current and current != "Новый чат":
+        return "Название чата уже задано."
+    title = title.strip()[:60]
+    if not title:
+        return "Ошибка: название не может быть пустым."
+    db["chats"].update_one({"_id": ctx.deps.chat_id}, {"$set": {"name": title}})
+    return "Название чата сохранено."
+
 @agent.tool
 def search_in_file(ctx: RunContext[AssistantDeps], filename: str, pattern: str) -> str:
     """Ищет строки в файле, содержащие текст 'pattern'. 
