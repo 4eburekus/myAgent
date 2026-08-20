@@ -18,23 +18,17 @@ def init_mongo():
     global _client, db, chats_collection, messages_collection
     if _client is None:
         from pymongo import MongoClient
-        try:
-            _client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000)
-            _client.admin.command('ping')
-            db = _client[MONGO_DB_NAME]
-            chats_collection = db["chats"]
-            messages_collection = db["messages"]
-        except Exception:
-            # MongoDB not available, use in-memory fallback
-            db = None
-            chats_collection = None
-            messages_collection = None
+        _client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+        _client.admin.command('ping')
+        db = _client[MONGO_DB_NAME]
+        chats_collection = db["chats"]
+        messages_collection = db["messages"]
+
+
+init_mongo()
 
 
 def get_db():
-    global db
-    if db is None:
-        init_mongo()
     return db
 
 

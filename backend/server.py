@@ -67,8 +67,6 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: str):
                 db = get_db()
                 chat = db["chats"].find_one({"_id": chat_id})
                 if not chat:
-                    from datetime import datetime
-                    import uuid
                     chat = {
                         "_id": chat_id,
                         "name": "Новый чат",
@@ -133,28 +131,6 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: str):
                     db["chats"].update_one(
                         {"_id": chat_id},
                         {"$set": {"messages": chat["messages"], "updated_at": chat["updated_at"]}}
-                    )
-
-                    # Save the message to DB
-                    chat["messages"].append({
-                        "id": str(uuid.uuid4()),
-                        "role": "user",
-                        "content": data["content"],
-                        "created_at": datetime.utcnow().isoformat()
-                    })
-                    chat["messages"].append({
-                        "id": str(uuid.uuid4()),
-                        "role": "assistant",
-                        "content": result.output,
-                        "created_at": datetime.utcnow().isoformat()
-                    })
-                    chat["updated_at"] = datetime.utcnow().isoformat()
-                    db["chats"].update_one(
-                        {"_id": chat_id},
-                        {"$set": {
-                            "messages": chat["messages"],
-                            "updated_at": chat["updated_at"]
-                        }}
                     )
 
                 except Exception as exc:
