@@ -28,14 +28,25 @@ def calculate(ctx: RunContext[AssistantDeps], expression: str) -> str:
 def agent_notes(ctx: RunContext[AssistantDeps], action: str, text: str = "") -> str:
     """Работа с заметками. 
     action: 'add' (чтобы сохранить текст) или 'list' (чтобы прочитать все)."""
-    # ctx.deps — это доступ к объекту состояний
+    # Заметки хранятся в MongoDB, в документе чата (поле notes), привязаны к chat_id.
+    from config import get_db
+    db = get_db()
+    chat = db["chats"].find_one({"_id": ctx.deps.chat_id})
+    if not chat:
+        return "Ошибка: чат не найден."
+    notes = chat.get("notes", [])
+
     if action == "add":
-        ctx.deps.notes.append(text)
+        notes.append(text)
+        db["chats"].update_one(
+            {"_id": ctx.deps.chat_id},
+            {"$set": {"notes": notes}}
+        )
         return "Заметка сохранена."
     elif action == "list":
-        if not ctx.deps.notes:
+        if not notes:
             return "Список заметок пуст."
-        return f"Твои текущие заметки: {ctx.deps.notes}"
+        return f"Твои текущие заметки: {notes}"
     return "Ошибка: выбери 'add' или 'list'."
 
 @agent.tool

@@ -14,6 +14,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from config import agent, AssistantDeps, get_db, chats_collection, messages_collection
 import tools  # noqa: register tools
 
+from pydantic_ai.messages import ModelRequest, ModelResponse, UserPromptPart, TextPart
+
 app = FastAPI(title="AI Assistant Backend")
 
 app.add_middleware(
@@ -71,17 +73,29 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: str):
                         "_id": chat_id,
                         "name": "Новый чат",
                         "messages": [],
+                        "notes": [],
                         "created_at": datetime.utcnow().isoformat(),
                         "updated_at": datetime.utcnow().isoformat()
                     }
                     db["chats"].insert_one(chat)
 
-                messages = [m["content"] for m in chat.get("messages", [])]
-                messages.append(data["content"])
+                # история теперь передаётся агенту штатным механизмом 
+                # pydantic-ai — через параметр message_history. 
+                # Для каждого сохранённого сообщения строится объект истории
+                history: list = []
+                for m in chat.get("messages", []):
+                    if m.get("role") == "user":
+                        history.append(ModelRequest(parts=[UserPromptPart(content=m["content"])]))
+                    elif m.get("role") == "assistant":
+                        history.append(ModelResponse(parts=[TextPart(content=m["content"])]))
 
                 deps = AssistantDeps(chat_id=chat_id)
                 try:
-                    result = await agent.run(data["content"], deps=deps)
+                    result = await agent.run(
+                        data["content"],
+                        deps=deps,
+                        message_history=history,
+                    )
 
                     # Stream agent internals back as events
                     for msg in result.new_messages():
