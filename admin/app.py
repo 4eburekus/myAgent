@@ -1,75 +1,106 @@
+# admin/app.py — прямое чтение чатов из MongoDB (без прокси на backend)
 import os
-import requests
-from fastapi import FastAPI, APIRouter
-from fastapi.responses import HTMLResponse, Response
-from fastapi.middleware.cors import CORSMiddleware
-from pathlib import Path
+from datetime import datetime
 
-app = FastAPI(title="Admin Panel")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
+from pymongo import MongoClient
 
-html_path = Path(__file__).parent / "index.html"
-html_content = html_path.read_text(encoding="utf-8")
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://mongo:27017")
+MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "myagent")
 
-# Backend URL
-BACKEND_URL = os.getenv("BACKEND_URL", "http://backend:8001")
+_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+db = _client[MONGO_DB_NAME]
+chats_collection = db["chats"]
 
-# Router for API proxy
-router = APIRouter()
-
-# Allowed proxy paths
-ALLOWED_PROXIES = {
-    "/chats": {"GET": [], "POST": []},
-    "/messages/{chat_id}": {"GET": ["chat_id"]},
-}
+app = FastAPI(title="Chat Admin (direct Mongo)")
 
 
-def proxy_request(method: str, path: str, **kwargs):
-    url = f"{BACKEND_URL}/api{path}"
-    if method == "GET":
-        return requests.get(url, **kwargs)
-    elif method == "POST":
-        return requests.post(url, **kwargs)
-    elif method == "PUT":
-        return requests.put(url, **kwargs)
-    elif method == "DELETE":
-        return requests.delete(url, **kwargs)
+def _serialize_chat(chat) -> dict:
+    """Преобразовать документ Mongo в JSON-ответ (id вместо _id, строковые даты)."""
+    return {
+        "id": chat.get("_id"),
+        "name": chat.get("name", "Новый чат"),
+        "messages": chat.get("messages", []),
+        "created_at": chat.get("created_at", ""),
+        "updated_at": chat.get("updated_at", ""),
+    }
 
 
-# --- Proxy endpoints ---
-@router.get("/api/chats")
-def proxy_chats_list():
-    res = proxy_request("GET", "/chats")
-    return Response(content=res.text, status_code=res.status_code, media_type="application/json")
+@app.get("/")
+def index():
+    return FileResponse("index.html")
 
 
-@router.post("/api/chats")
-def proxy_chat_create(body: dict):
-    res = proxy_request("POST", "/chats", json=body)
-    return Response(content=res.text, status_code=res.status_code, media_type="application/json")
+@app.get("/api/chats")
+def list_chats():
+    """Список чатов напрямую из Mongo, сортировка по updated_at desc."""
+    chats = list(chats_collection.find().sort("updated_at", -1))
+    return [
+        {
+            "id": c.get("_id"),
+            "name": c.get("name", "Новый чат"),
+            "updated_at": c.get("updated_at", ""),
+            "message_count": len(c.get("messages", [])),
+        }
+        for c in chats
+    ]
 
 
-@router.delete("/api/chats/{chat_id}")
-def proxy_chat_delete(chat_id: str):
-    res = proxy_request("DELETE", f"/chats/{chat_id}")
-    return Response(content=res.text, status_code=res.status_code, media_type="application/json")
+@app.get("/api/chats/{chat_id}")
+def get_chat(chat_id: str):
+    """Один чат (включая сообщения) напрямую из Mongo."""
+    chat = chats_collection.find_one({"_id": chat_id})
+    if not chat:
+        raise HTTPException(404, "Chat not found")
+    return _serialize_chat(chat)
 
 
-@router.put("/api/chats/{chat_id}/rename")
-def proxy_chat_rename(chat_id: str, body: dict):
-    res = proxy_request("PUT", f"/chats/{chat_id}/rename", json=body)
-    return Response(content=res.text, status_code=res.status_code, media_type="application/json")
+@app.post("/api/chats", status_code=201)
+def create_chat():
+    """Создать новый чат напрямую в Mongo."""
+    import uuid
+    chat_id = str(uuid.uuid4())
+    now = datetime.utcnow().isoformat()
+    chat = {
+        "_id": chat_id,
+        "name": "Новый чат",
+        "messages": [],
+        "created_at": now,
+        "updated_at": now,
+    }
+    chats_collection.insert_one(chat)
+    return _serialize_chat(chat)
 
 
-@router.get("/api/messages/{chat_id}")
-def proxy_messages(chat_id: str):
-    res = proxy_request("GET", f"/messages/{chat_id}")
-    return Response(content=res.text, status_code=res.status_code, media_type="application/json")
+@app.put("/api/chats/{chat_id}/rename")
+def rename_chat(chat_id: str, body: dict = None):
+    """Переименовать чат напрямую в Mongo."""
+    if body is None:
+        body = {}
+    name = body.get("name") or "Новый чат"
+    res = chats_collection.update_one(
+        {"_id": chat_id},
+        {"$set": {"name": name, "updated_at": datetime.utcnow().isoformat()}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(404, "Chat not found")
+    return _serialize_chat(chats_collection.find_one({"_id": chat_id}))
 
 
-app.include_router(router)
+@app.delete("/api/chats/{chat_id}")
+def delete_chat(chat_id: str):
+    """Удалить чат напрямую из Mongo."""
+    res = chats_collection.delete_one({"_id": chat_id})
+    if res.deleted_count == 0:
+        raise HTTPException(404, "Chat not found")
+    return {"ok": True}
 
 
-@app.get("/", response_class=HTMLResponse)
-def admin_panel():
-    return html_content
+@app.get("/api/messages/{chat_id}")
+def get_messages(chat_id: str):
+    """Сообщения чата напрямую из Mongo."""
+    chat = chats_collection.find_one({"_id": chat_id})
+    if not chat:
+        raise HTTPException(404, "Chat not found")
+    return chat.get("messages", [])

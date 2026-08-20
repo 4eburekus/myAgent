@@ -17,8 +17,10 @@ BACKEND_WS_URL = os.getenv("BACKEND_WS_URL", "ws://localhost:8001/ws")
 @cl.on_chat_start
 async def start():
     """Вызывается при старте чата"""
-    session_id = cl.user_session.get("session_id", "default")
-    cl.user_session.set("chat_id", session_id)
+    # chat_id = thread_id из Chainlit: постоянный UUID, хранится в localStorage браузера
+    # и переживает перезагрузку страницы. Используется как _id документа в Mongo.
+    chat_id = cl.context.session.thread_id
+    cl.user_session.set("chat_id", chat_id)
     cl.user_session.set("streaming", False)
     cl.user_session.set("agent", None)
 
@@ -29,8 +31,8 @@ async def start():
 async def main(message: cl.Message):
     """Вызывается, когда пользователь присылает сообщение"""
 
-    session_id = cl.user_session.get("session_id", "default")
-    chat_id = cl.user_session.get("chat_id", session_id)
+    chat_id = cl.user_session.get("chat_id") or cl.context.session.thread_id
+    cl.user_session.set("chat_id", chat_id)
 
     # Создаем пустой контейнер для ответа агента в UI
     final_response = cl.Message(content="")

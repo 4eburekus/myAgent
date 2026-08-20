@@ -34,8 +34,10 @@ services:
     ports:
       - "8003:8003"
     environment:
-      - BACKEND_URL=http://backend:8001
-      - OPENAI_BASE_URL=http://10.45.0.75:8000/v1
+      - MONGO_URI=mongodb://mongo:27017
+      - MONGO_DB_NAME=myagent
+    depends_on:
+      - mongo
     restart: unless-stopped
 
   mongo:
