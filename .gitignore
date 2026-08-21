@@ -17,3 +17,7 @@ __pycache__/
 # IDE
 .idea/
 .vscode/
+
+# Пространство агента
+my-folder/*
+!my-folder/.gitkeep

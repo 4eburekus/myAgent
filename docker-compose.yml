@@ -9,6 +9,9 @@ services:
     environment:
       - OPENAI_BASE_URL=http://10.45.0.75:8000/v1
       - MONGO_URI=mongodb://mongo:27017
+      - AGENT_WORKSPACE=/app/workspace
+    volumes:
+      - D:/Desktop/myAgent/agentWorkspace:/app/workspace
     depends_on:
       - mongo
     restart: unless-stopped

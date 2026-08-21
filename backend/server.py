@@ -96,6 +96,19 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: str):
                         deps=deps,
                         message_history=history,
                     )
+                    
+                    # --- rate limit + audit log for run_console_command ---
+                    tool_calls = [
+                        (p.tool_name, str(p.args) if hasattr(p, "args") else "")
+                        for msg in result.new_messages()
+                        for p in msg.parts
+                        if hasattr(p, "tool_name")
+                    ]
+                    console_calls_count = sum(1 for name, _ in tool_calls if name == "run_console_command")
+                    if console_calls_count:
+                        chat["console_calls"] = chat.get("console_calls", 0) + console_calls_count
+                        if chat["console_calls"] > 5:
+                            chat["console_calls"] = 5  # cap at 5
 
                     # Stream agent internals back as events
                     for msg in result.new_messages():

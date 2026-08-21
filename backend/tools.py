@@ -51,6 +51,26 @@ def agent_notes(ctx: RunContext[AssistantDeps], action: str, text: str = "") -> 
 
 
 @agent.tool
+def run_console_command(ctx: RunContext[AssistantDeps], command: str) -> str:
+    """Работает с консолью компьютера пользователя.
+    Запускает безопасную Linux-команду в папке /app/workspace (внутри контейнера).
+    Работает для просмотра/редактирования файлов, перемещения, копирования и 
+    создания папок. Все файлы/папки строго внутри workspace.
+    
+    Ограничения:
+    - 5 секунд на команду (timeout)
+    - Вывод ограничен 10 KB (лимит на вывод)
+    - Только разрешённые команды (whitelist: ls, cat, cp, mv, mkdir, echo, find, grep, wc, head, tail, pwd, whoami, date, uptime, chmod, chown, touch, ln, du, stat, file, readlink, basename, dirname)
+    - Запрещено: rm, любые команды, выходящие за пределы workspace
+    - Путь: должен начинаться с /app/workspace или быть относительным (без ..)
+    """
+    from sandbox import run_console_command
+    
+    result = run_console_command(command)
+    return f"Результат выполнения команды: {result}"
+
+
+@agent.tool
 def set_chat_title(ctx: RunContext[AssistantDeps], title: str) -> str:
     """Сохраняет название чата. Вызови один раз в начале разговора, когда понял тему диалога.
     Аргумент title: короткое название (3-6 слов), отражающее суть разговора."""
