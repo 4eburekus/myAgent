@@ -1,30 +1,19 @@
 # frontend/app.py — Chainlit UI с WebSocket-подключением к бэкенду
-import sys  # для работы с путями и т.д.
-from pathlib import Path  # для работы с путями файлов
-import os  # для работы с окружением и переменными
-import json  # для сериализации/десериализации данных
-
+import sys
+from pathlib import Path
+import os
+import json
 # Добавляем путь к backend-модулю в sys.path, чтобы можно было импортировать 
 # из backend (config.py, tools.py и т.д.) из frontend-контекста
 sys.path.append(str(Path(__file__).resolve().parent.parent / "backend"))
 
-# фреймворк для чат-интерфейса
 import chainlit as cl
-
-# agent (pydantic-ai агент) AssistantDeps (dataclass с параметрами)
-# из backend/config.py
 from config import agent, AssistantDeps
-
-# все инструменты из tools.py
-# noqa: register tools — это noqa-директива, которая говорит линтерам игнорировать 
-# это импортирование, потому что оно регистрирует инструменты в системе агента
 import tools
-
 # URL для подключения к бэкенду через WebSocket
 # Берётся из переменной окружения BACKEND_WS_URL, по умолчанию — ws://localhost:8001/ws
 BACKEND_WS_URL = os.getenv("BACKEND_WS_URL", "ws://localhost:8001/ws")
 
-# Декоратор @cl.on_chat_start — запускается, когда пользователь начинает новый чат
 @cl.on_chat_start
 async def start():
     """Вызывается при старте чата"""
@@ -39,28 +28,24 @@ async def start():
     # Устанавливаем agent в None — агент ещё не инициализирован
     cl.user_session.set("agent", None)
     
-    # Отправляем приветственное сообщение пользователю
-    # Создаём Message с контентом и отправляем через send()
     await cl.Message(content="Привет! Я ваш ИИ-агент. Чем могу помочь?").send()
 
-# @cl.on_message — вызывается, когда пользователь отправляет сообщение
+# вызывается, когда пользователь отправляет сообщение
 @cl.on_message
 async def main(message: cl.Message):
     """Вызывается, когда пользователь присылает сообщение"""
     
     # Получаем chat_id из user_session или из контекста сессии
     chat_id = cl.user_session.get("chat_id") or cl.context.session.thread_id
-    
     # Сохраняем chat_id в user_session
     cl.user_session.set("chat_id", chat_id)
-    
     # Создаем пустой контейнер для ответа агента в UI
     final_response = cl.Message(content="")
     
     # Отправляем сообщение на backend через WebSocket
     try:
-        import asyncio  # Импортируем asyncio для асинхронных операций
-        import websockets  # Импортируем websockets для WebSocket-соединения
+        import asyncio
+        import websockets
         
         # Открываем WebSocket-соединение с бэкендом
         # Формируем URL: BACKEND_WS_URL + /chat_id

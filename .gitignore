@@ -19,5 +19,5 @@ __pycache__/
 .vscode/
 
 # Пространство агента
-my-folder/*
-!my-folder/.gitkeep
+agentWorkspace/*
+!agentWorkspace/.gitkeep
