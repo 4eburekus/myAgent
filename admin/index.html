@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Management</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 24px;
+        }
+        h1 { color: #333; margin-bottom: 20px; }
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 2px;
+            transition: opacity 0.2s;
+        }
+        .btn:hover { opacity: 0.85; }
+        .btn-primary { background: #4CAF50; color: white; }
+        .btn-secondary { background: #2196F3; color: white; }
+        .btn-warning { background: #FF9800; color: white; }
+        .btn-danger { background: #f44336; color: white; }
+        .btn-back { background: #666; color: white; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 16px;
+        }
+        th, td {
+            border-bottom: 1px solid #eee;
+            padding: 12px 8px;
+            text-align: left;
+        }
+        th { background: #fafafa; font-weight: 600; color: #555; }
+        tr:hover { background: #f9f9f9; }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal.active { display: flex; }
+        .modal-content {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            width: 420px;
+            max-width: 90%;
+        }
+        .modal-content h3 { margin-bottom: 16px; }
+        .modal-content input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            font-size: 14px;
+        }
+        .message { margin: 8px 0; padding: 12px; border-radius: 8px; max-width: 90%; }
+        .message.user { background: #e3f2fd; margin-left: 20px; }
+        .message.assistant { background: #f1f8e9; margin-right: 20px; }
+        .message strong { display: block; margin-bottom: 4px; font-size: 13px; }
+        .message p { margin: 0; white-space: pre-wrap; }
+        #messages { max-height: 50vh; overflow-y: auto; margin-top: 16px; }
+        .hidden { display: none !important; }
+        .empty { color: #999; padding: 40px; text-align: center; }
+        .actions { display: flex; gap: 4px; flex-wrap: wrap; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>💬 Chat Management</h1>
+        <button class="btn btn-primary" onclick="createChat()">+ New Chat</button>
+
+        <!-- Chat List Table -->
+        <table id="chats-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Created</th>
+                    <th>Updated</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="chats-body"></tbody>
+        </table>
+
+        <!-- Chat Detail View -->
+        <div id="chat-detail" class="hidden">
+            <h2 id="chat-name" style="color:#333;"></h2>
+            <button class="btn btn-back" onclick="showTable()">← Back to List</button>
+            <div id="messages"></div>
+        </div>
+    </div>
+
+    <!-- Rename Modal -->
+    <div id="rename-modal" class="modal">
+        <div class="modal-content">
+            <h3>Rename Chat</h3>
+            <input type="text" id="rename-input" placeholder="Enter new name">
+            <button class="btn btn-primary" onclick="confirmRename()">Save</button>
+            <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        </div>
+    </div>
+
+    <script>
+        const API = "/admin/api";
+        let currentRenameId = null;
+
+        async function loadChats() {
+            try {
+                const res = await fetch(`${API}/chats`);
+                const chats = await res.json();
+                const tbody = document.getElementById('chats-body');
+                tbody.innerHTML = '';
+                if (chats.length === 0) {
+                    document.querySelector('#chats-table thead').nextElementSibling.parentElement.innerHTML =
+                        '<tr><td colspan="4" class="empty">No chats yet. Click "New Chat" to create one.</td></tr>';
+                    return;
+                }
+                chats.forEach(chat => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td class="chat-name">${esc(chat.name)}</td>
+                        <td>${fmtDate(chat.created_at)}</td>
+                        <td>${fmtDate(chat.updated_at)}</td>
+                        <td>
+                            <div class="actions">
+                                <button class="btn btn-warning" onclick="viewChat('${chat.id}')">View</button>
+                                <button class="btn btn-secondary" onclick="openRename('${chat.id}', '${escAttr(chat.name)}')">Rename</button>
+                                <button class="btn btn-danger" onclick="deleteChat('${chat.id}')">Delete</button>
+                            </div>
+                        </td>`;
+                    tbody.appendChild(tr);
+                });
+            } catch (e) {
+                console.error('Failed to load chats:', e);
+            }
+        }
+
+        async function createChat() {
+            try {
+                const res = await fetch(`${API}/chats`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name: 'New Chat'})
+                });
+                await res.json();
+                loadChats();
+            } catch (e) {
+                console.error('Failed to create chat:', e);
+            }
+        }
+
+        async function deleteChat(id) {
+            if (!confirm('Delete this chat permanently?')) return;
+            try {
+                await fetch(`${API}/chats/${id}`, {method: 'DELETE'});
+                loadChats();
+            } catch (e) {
+                console.error('Failed to delete chat:', e);
+            }
+        }
+
+        function openRename(id, name) {
+            currentRenameId = id;
+            document.getElementById('rename-input').value = name;
+            document.getElementById('rename-modal').classList.add('active');
+        }
+
+        async function confirmRename() {
+            const name = document.getElementById('rename-input').value.trim();
+            if (!name) return;
+            try {
+                await fetch(`${API}/chats/${currentRenameId}/rename`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name})
+                });
+                closeModal();
+                loadChats();
+            } catch (e) {
+                console.error('Failed to rename:', e);
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('rename-modal').classList.remove('active');
+        }
+
+        function esc(str) { const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
+        function escAttr(str) { return str.replace(/'/g, "\\'").replace(/"/g, '\\"'); }
+        function fmtDate(iso) {
+            if (!iso) return '—';
+            return new Date(iso).toLocaleString('ru-RU', {year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+        }
+
+        async function viewChat(id) {
+            try {
+                const chatRes = await fetch(`${API}/chats/${id}`);
+                const chat = await chatRes.json();
+                const messagesRes = await fetch(`${API}/messages/${id}`);
+                const messages = await messagesRes.json();
+
+                document.getElementById('chat-name').textContent = chat.name;
+                const messagesDiv = document.getElementById('messages');
+                messagesDiv.innerHTML = '';
+                if (messages.length === 0) {
+                    messagesDiv.innerHTML = '<div class="empty">No messages yet</div>';
+                } else {
+                    messages.forEach(msg => {
+                        const div = document.createElement('div');
+                        div.className = `message ${msg.role}`;
+                        div.innerHTML = `<strong>${msg.role === 'user' ? '👤 User' : '🤖 Assistant'}</strong><p>${esc(msg.content)}</p>`;
+                        messagesDiv.appendChild(div);
+                    });
+                }
+
+                document.getElementById('chats-table').classList.add('hidden');
+                document.getElementById('chat-detail').classList.remove('hidden');
+            } catch (e) {
+                console.error('Failed to view chat:', e);
+            }
+        }
+
+        function showTable() {
+            document.getElementById('chats-table').classList.remove('hidden');
+            document.getElementById('chat-detail').classList.add('hidden');
+            loadChats();
+        }
+
+        loadChats();
+        setInterval(loadChats, 15000);
+    </script>
+</body>
+</html>

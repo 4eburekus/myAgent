@@ -1,76 +1,110 @@
-# frontend/app.py
+# frontend/app.py — Chainlit UI с WebSocket-подключением к бэкенду
 import sys
 from pathlib import Path
-
-# Добавляем backend в путь импорта (независимо от папки запуска)
+import os
+import json
+# Добавляем путь к backend-модулю в sys.path, чтобы можно было импортировать 
+# из backend (config.py, tools.py и т.д.) из frontend-контекста
 sys.path.append(str(Path(__file__).resolve().parent.parent / "backend"))
 
 import chainlit as cl
 from config import agent, AssistantDeps
-import tools  # Регистрируем инструменты
-
+import tools
+# URL для подключения к бэкенду через WebSocket
+# Берётся из переменной окружения BACKEND_WS_URL, по умолчанию — ws://localhost:8001/ws
+BACKEND_WS_URL = os.getenv("BACKEND_WS_URL", "ws://localhost:8001/ws")
 
 @cl.on_chat_start
 async def start():
     """Вызывается при старте чата"""
-    # Инициализируем зависимости и историю для каждой сессии пользователя
-    deps = AssistantDeps()
-    history = []
+    # chat_id = thread_id из Chainlit: постоянный UUID, хранится в localStorage браузера
+    # и переживает перезагрузку страницы. Используется как _id документа в Mongo.
+    chat_id = cl.context.session.thread_id
     
-    cl.user_session.set("deps", deps)
-    cl.user_session.set("history", history)
+    # Сохраняем chat_id в user_session для дальнейшего использования
+    cl.user_session.set("chat_id", chat_id)
+    # Устанавливаем streaming в False — значит, ничего не идёт сейчас
+    cl.user_session.set("streaming", False)
+    # Устанавливаем agent в None — агент ещё не инициализирован
+    cl.user_session.set("agent", None)
     
-    await cl.Message(content="Привет! Я ваш ИИ-ассистент. Чем могу помочь?").send()
+    await cl.Message(content="Привет! Я ваш ИИ-агент. Чем могу помочь?").send()
 
-
+# вызывается, когда пользователь отправляет сообщение
 @cl.on_message
 async def main(message: cl.Message):
     """Вызывается, когда пользователь присылает сообщение"""
     
-    # Достаем состояние сессии
-    deps = cl.user_session.get("deps")
-    history = cl.user_session.get("history")
-
+    # Получаем chat_id из user_session или из контекста сессии
+    chat_id = cl.user_session.get("chat_id") or cl.context.session.thread_id
+    # Сохраняем chat_id в user_session
+    cl.user_session.set("chat_id", chat_id)
     # Создаем пустой контейнер для ответа агента в UI
     final_response = cl.Message(content="")
-
-    # Запускаем агента
-    result = await agent.run(
-        message.content, 
-        deps=deps, 
-        message_history=history
-    )
-
-    # Обрабатываем "ход мыслей" и инструменты для отображения в Chainlit
-    for msg in result.new_messages():
-        if hasattr(msg, 'parts'):
-            for part in msg.parts:
+    
+    # Отправляем сообщение на backend через WebSocket
+    try:
+        import asyncio
+        import websockets
+        
+        # Открываем WebSocket-соединение с бэкендом
+        # Формируем URL: BACKEND_WS_URL + /chat_id
+        # Например: ws://localhost:8001/ws/{chat_id}
+        async with websockets.connect(f"{BACKEND_WS_URL}/{chat_id}") as ws:
+            # Отправляем сообщение на backend
+            # Сериализуем JSON с типом сообщения и контентом
+            await ws.send(json.dumps({
+                "type": "message",  # Тип сообщения — "message"
+                "content": message.content  # Контент сообщения пользователя
+            }))
+            
+            # Собираем ответ
+            while True:  # Бесконечный цикл для ожидания ответа
+                response = await ws.recv()  # Получаем ответ от backend
+                data = json.loads(response)  # Парсим JSON-ответ
                 
-                # 1. Отображаем МЫСЛИ (Thinking)
-                if hasattr(part, 'provider_details') and part.provider_details:
-                    raw_thoughts = part.provider_details.get('raw_content')
-                    if raw_thoughts:
-                        thought_text = "".join(raw_thoughts).strip()
-                        # В Chainlit "мысли" красиво выглядят через Step
-                        async with cl.Step(name="Размышления", type="run") as step:
-                            step.output = thought_text
-
-                # 2. Отображаем использование ИНСТРУМЕНТОВ
-                if hasattr(part, 'tool_name'):
-                    # Если это вызов (Request)
-                    if hasattr(part, 'args'):
-                        async with cl.Step(name=f"Инструмент: {part.tool_name}", type="tool") as step:
-                            step.input = f"Аргументы: {part.args}"
-                    
-                    # Если это ответ инструмента (Return)
-                    if hasattr(part, 'content'):
-                        # Находим последний шаг инструмента и добавляем туда результат
-                        async with cl.Step(name=f"Результат: {part.tool_name}") as step:
-                            step.output = str(part.content)
-
-    # Обновляем историю в сессии
-    cl.user_session.set("history", result.all_messages())
+                # Если это thought — размышления агента
+                if data["type"] == "thought":
+                    # Показываем размышления
+                    # Создаём Step с name="размышления" и type="run"
+                    async with cl.Step(name="размышления", type="run") as step:
+                        # Устанавливаем output — содержимое размышлений
+                        step.output = data["content"]
+                
+                # Если это tool_call — использование инструмента
+                elif data["type"] == "tool_call":
+                    # Показываем использование инструмента
+                    # Создаём Step с name="{name}" и type="tool"
+                    async with cl.Step(name=f"{data['name']}", type="tool") as step:
+                        # Устанавливаем input — аргументы вызова
+                        step.input = f"Аргументы: {data.get('args', '')}"
+                
+                # Если это tool_result — результат использования инструмента
+                elif data["type"] == "tool_result":
+                    # Показываем результат
+                    # Создаём Step с name="результат {name}" и type="tool"
+                    async with cl.Step(name=f"результат {data['name']}", type="tool") as step:
+                        # Устанавливаем output — содержимое результата
+                        step.output = data["content"]
+                
+                # Если это final — финальный ответ
+                elif data["type"] == "final":
+                    # Финальный ответ
+                    # Устанавливаем content финального ответа
+                    final_response.content = data["content"]
+                    break  # Прерываем цикл, ответ получен
+                
+                # Если это error — ошибка
+                elif data["type"] == "error":
+                    # Отправляем ошибку пользователю
+                    # Создаём ErrorMessage с content
+                    await cl.ErrorMessage(content=data["content"]).send()
+                    break  # Прерываем цикл, ошибка
+            
+    except Exception as e:
+        # Отправляем ошибку пользователю
+        await cl.ErrorMessage(content=f"Ошибка подключения к бэкенду: {str(e)}").send()
 
     # Отправляем финальный ответ пользователю
-    final_response.content = result.output
-    await final_response.send()
+    if final_response.content:
+        await final_response.send()
