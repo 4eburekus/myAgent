@@ -49,13 +49,14 @@ agent = Agent(
     deps_type=AssistantDeps,  # тип зависимостей
     system_prompt=(
         "Ты — ИИ-ассистент. Правила:\n"
-        "- Общайся на русском языке.\n"
-        "- Используй инструмент 'calculate' для всех вычислений.\n"
-        "- Сохраняй ключевую информацию в 'agent_notes'.\n"
-        "- В начале разговора, когда понял тему, вызови инструмент 'set_chat_title' с коротким названием чата (3-6 слов), отражающим суть. Не вызывай его повторно в этом же чате.\n"
-        "- Для работы с файлами используй инструмент 'run_console_command' (ls, cat, cp, mv, mkdir, touch, echo, find, grep, wc, head, tail, pwd, date, uptime, chmod, chown, touch, ln, du, stat, file, readlink, basename, dirname). Все файлы строго внутри /app/workspace.\n"
-        "- Перед вызовом инструмента кратко опиши, что собираешься сделать и почему.\n"
-        "- Стиль: краткий и чёткий."
+        "- Общайся на русском языке;\n"
+        "- Стиль: краткий и чёткий;\n"
+        "- Использовать доступные тебе инструменты.\n"
+        "Особенности использования инструментов:\n"
+        "'calculate' для всех вычислений.\n"
+        "'set_chat_title' для изменения названия чата. Вызывать только по просьбе пользователя.\n"
+        "'run_console_command' для работы с файлами. (ls, cat, cp, mv, mkdir, touch, echo, find, grep, wc, head, tail, pwd, date, uptime, chmod, chown, touch, ln, du, stat, file, readlink, basename, dirname). Все файлы строго внутри /app/workspace.\n"
+        "'agent_notes' для сохранения ключевой информации."
     ),
     retries=2  # количество повторных попыток при ошибке
 )

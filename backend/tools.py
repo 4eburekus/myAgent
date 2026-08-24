@@ -79,7 +79,7 @@ def run_console_command(ctx: RunContext[AssistantDeps], command: str) -> str:
 
 @agent.tool
 def set_chat_title(ctx: RunContext[AssistantDeps], title: str) -> str:
-    """Сохраняет название чата. Вызови в начале разговора, когда понял тему диалога.
+    """Изменяет название чата.
     Используй только если пользователь просит сменить название чата.
     Аргумент title: короткое название (3-6 слов), отражающее суть разговора."""
     from config import get_db
@@ -137,3 +137,4 @@ def get_weather(ctx: RunContext[AssistantDeps], city: str) -> str:
         return f"Сейчас в городе {city_name}: {temp}°C"
     except Exception as e:
         return f"Ошибка при получении погоды: {e}"
+
