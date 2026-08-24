@@ -98,20 +98,12 @@
     <div class="app">
         <!-- Sidebar -->
         <div class="sidebar">
-            <div class="sidebar-header">
-                <h2>💬 Чаты</h2>
-                <button class="new-chat-btn" onclick="createChat()">+ Новый чат</button>
-            </div>
             <div class="chat-list" id="chat-list"></div>
         </div>
         
         <!-- Main content -->
         <div class="main" id="main-content">
             <div class="chat-detail hidden" id="chat-detail">
-                <div class="chat-header">
-                    <button class="back-btn" onclick="closeChat()">← Назад</button>
-                    <h3 id="chat-title"></h3>
-                </div>
                 <div class="messages-container" id="messages"></div>
             </div>
         </div>
@@ -175,11 +167,13 @@
                 const msgsRes = await fetch(`${API}/messages/${id}`);
                 const messages = await msgsRes.json();
                 
-                document.getElementById('chat-detail').classList.remove('hidden');
-                document.getElementById('chat-title').textContent = chat.name;
-                
+                const chatDetail = document.getElementById('chat-detail');
+                chatDetail.classList.remove('hidden');
+                chatDetail.innerHTML = `
+                    <div style="padding:12px 24px;background:white;border-bottom:1px solid #ddd;font-size:12px;color:#666;">id: ${esc(chat.id)}</div>
+                    <div class="messages-container" id="messages"></div>
+                `;
                 const container = document.getElementById('messages');
-                container.innerHTML = '';
                 
                 if (messages.length === 0) {
                     container.innerHTML = '<div style="color:#999;padding:40px;text-align:center;">Нет сообщений</div>';
@@ -203,8 +197,8 @@
 
         function closeChat() {
             currentChatId = null;
-            document.getElementById('welcome-screen').classList.remove('hidden');
-            document.getElementById('chat-detail').classList.add('hidden');
+            const chatDetail = document.getElementById('chat-detail');
+            chatDetail.classList.add('hidden');
             loadChats();
         }
 
