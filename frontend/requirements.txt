@@ -1,0 +1,5 @@
+chainlit
+websockets
+pydantic-ai-slim[openai]
+openai
+pymongo==4.6.1
