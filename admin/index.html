@@ -88,7 +88,15 @@
         
         .msg-time { font-size: 11px; color: #aaa; margin-top: 4px; }
         
+        /* Inline rename in chat detail */
+        .rename-name { cursor: pointer; text-decoration: underline dashed #ccc; margin-left: 8px; font-weight: 500; color: #333; }
+        .rename-name:hover { color: #007bff; text-decoration-color: #007bff; }
+        .rename-input { font-size: 13px; font-weight: 500; border: 1px solid #007bff; border-radius: 3px; padding: 1px 4px; outline: none; width: 200px; }
+        
         /* Sidebar scrollbar */
+        .inline-name { font-size:13px;color:#333;font-weight:500;cursor:pointer;border-bottom:1px dashed #ccc;margin-left:8px;padding-bottom:1px; }
+        .inline-name:hover { color:#000; border-bottom-color:#666; }
+        .inline-name-input { font-size:13px;font-weight:500;border:1px solid #007bff;border-radius:3px;padding:1px 4px;outline:none;width:200px; }
         .chat-list::-webkit-scrollbar { width: 6px; }
         .chat-list::-webkit-scrollbar-track { background: transparent; }
         .chat-list::-webkit-scrollbar-thumb { background: #0f3460; border-radius: 3px; }
@@ -112,6 +120,7 @@
     <script>
         const API = "/api";
         let currentChatId = null;
+        let isRenaming = false;
 
         function fmtDate(iso) {
             if (!iso) return '—';
@@ -122,6 +131,7 @@
 
         // Load sidebar list
         async function loadChats() {
+            if (isRenaming) return;
             try {
                 const res = await fetch(`${API}/chats`);
                 const chats = await res.json();
@@ -146,17 +156,17 @@
             } catch (e) { console.error('Failed to load chats:', e); }
         }
 
-        async function createChat() {
-            try {
-                const res = await fetch(`${API}/chats`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({name: 'Новый чат'})
-                });
-                const chat = await res.json();
-                openChat(chat.id);
-            } catch (e) { console.error('Failed to create chat:', e); }
-        }
+        // async function createChat() {
+        //     try {
+        //         const res = await fetch(`${API}/chats`, {
+        //             method: 'POST',
+        //             headers: {'Content-Type': 'application/json'},
+        //             body: JSON.stringify({name: 'Новый чат'})
+        //         });
+        //         const chat = await res.json();
+        //         openChat(chat.id);
+        //     } catch (e) { console.error('Failed to create chat:', e); }
+        // }
 
         async function openChat(id) {
             currentChatId = id;
@@ -170,7 +180,7 @@
                 const chatDetail = document.getElementById('chat-detail');
                 chatDetail.classList.remove('hidden');
                 chatDetail.innerHTML = `
-                    <div style="padding:12px 24px;background:white;border-bottom:1px solid #ddd;font-size:12px;color:#666;">id: ${esc(chat.id)}</div>
+                    <div style="padding:12px 24px;background:white;border-bottom:1px solid #ddd;font-size:12px;color:#666;">id: ${esc(chat.id)} — <span class="rename-name" ondblclick="renameChat('${chat.id}', this, '${esc(chat.name)}')">${esc(chat.name)}</span></div>
                     <div class="messages-container" id="messages"></div>
                 `;
                 const container = document.getElementById('messages');
@@ -215,6 +225,45 @@
 
         loadChats();
         setInterval(loadChats, 10000);
+    </script>
+
+    <script>
+        function renameChat(chatId, el, currentName) {
+            if (isRenaming) return;
+            isRenaming = true;
+            const input = document.createElement('input');
+            input.className = 'rename-input';
+            input.value = currentName;
+            el.replaceWith(input);
+            input.focus();
+            input.select();
+
+            function save() {
+                const newName = input.value.trim();
+                if (newName && newName !== currentName) {
+                    fetch(API + '/chats/' + chatId + '/rename', {
+                        method: 'PUT',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({name: newName})
+                    }).then(() => {
+                        loadChats();
+                    }).catch(e => {
+                        console.error('Rename failed:', e);
+                        loadChats();
+                    });
+                } else {
+                    loadChats();
+                }
+                isRenaming = false;
+            }
+
+            input.onblur = save;
+            input.onkeydown = function(e) {
+                if (e.key === 'Enter') { e.preventDefault(); save(); }
+                if (e.key === 'Escape') { input.value = currentName; save(); }
+            };
+            
+        }
     </script>
 </body>
 </html>
