@@ -138,3 +138,76 @@ def get_weather(ctx: RunContext[AssistantDeps], city: str) -> str:
     except Exception as e:
         return f"Ошибка при получении погоды: {e}"
 
+
+@agent.tool
+def create_docx(ctx: RunContext[AssistantDeps], filename: str, title: str, paragraphs: list) -> str:
+    """Создаёт новый .docx файл в папке /app/workspace.
+    Аргументы:
+    - filename: имя файла с расширением .docx
+    - title: заголовок документа
+    - paragraphs: список строк текста (каждая строка — отдельный абзац)
+    
+    Например: ['Заголовок', 'Первый абзац', 'Второй абзац']
+    """
+    import os
+    from docx import Document
+    
+    # Рабочая директория
+    workspace = os.getenv("AGENT_WORKSPACE", "/app/workspace")
+    filepath = os.path.join(workspace, filename)
+    
+    # Проверяем, что имя файла заканчивается на .docx
+    if not filename.lower().endswith('.docx'):
+        return "Ошибка: имя файла должно заканчиваться на .docx"
+    
+    try:
+        # Создаём документ
+        doc = Document()
+        
+        # Добавляем заголовок
+        doc.add_heading(title, level=1)
+        
+        # Добавляем параграфы
+        for para in paragraphs:
+            doc.add_paragraph(para)
+        
+        # Сохраняем файл
+        doc.save(filepath)
+        return f"Файл '{filename}' успешно создан в {workspace}"
+    
+    except Exception as e:
+        return f"Ошибка при создании файла: {str(e)}"
+
+
+@agent.tool
+def read_docx(ctx: RunContext[AssistantDeps], filename: str) -> str:
+    """Читает содержимое .docx файла из папки /app/workspace.
+    Аргумент filename: имя файла (с расширением .docx)
+    Возвращает текстовое содержимое файла."""
+    import os
+    from docx import Document
+    
+    # Рабочая директория
+    workspace = os.getenv("AGENT_WORKSPACE", "/app/workspace")
+    filepath = os.path.join(workspace, filename)
+    
+    # Проверяем, что файл существует
+    if not os.path.exists(filepath):
+        return f"Файл '{filename}' не найден."
+    
+    try:
+        # Открываем документ
+        doc = Document(filepath)
+        
+        # Собираем все абзацы
+        text_parts = []
+        for para in doc.paragraphs:
+            if para.text.strip():  # пропускаем пустые абзацы
+                text_parts.append(para.text)
+        
+        return "\n\n".join(text_parts)
+    
+    except Exception as e:
+        return f"Ошибка при чтении файла: {str(e)}"
+
+
