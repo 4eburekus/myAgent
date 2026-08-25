@@ -286,10 +286,38 @@ def create_docx(ctx: RunContext[AssistantDeps], filename: str, title: str, parag
 
 @agent.tool
 def append_to_docx(ctx: RunContext[AssistantDeps], filename: str, paragraphs: list) -> str:
-    """Добавляет новые абзацы в существующий .docx файл, не破坏 существующий контент.
+    """Добавляет новые абзацы в существующий .docx файл.
     Аргументы:
     - filename: имя существующего файла .docx
-    - paragraphs: список словарей с параметрами абзацев (такие же, как в create_docx)
+    - paragraphs: список словарей с параметрами абзацев. Каждый словарь может содержать:
+        * 'text' (str) — текст абзаца (обязательно)
+        * 'style' (str) — стиль: 'heading' для заголовка, 'normal' для обычного текста
+        * 'bold' (bool) — жирный текст (по умолчанию False)
+        * 'italic' (bool) — курсив (по умолчанию False)
+        * 'level' (int) — уровень заголовка 1-9 (по умолчанию 1)
+        * 'alignment' (str) — 'left', 'center', 'right', 'justify'
+        * 'font_size' (int) — размер шрифта в пунктах (по умолчанию 12 для normal, 14-26 для heading)
+        * 'font_name' (str) — имя шрифта (по умолчанию 'Calibri')
+        * 'space_before' (int) — отступ перед абзацем в пунктах (по умолчанию 0)
+        * 'space_after' (int) — отступ после абзаца в пунктах (по умолчанию 6)
+        * 'line_spacing' (float) — междустрочный интервал (по умолчанию 1.15)
+    
+    Пример:
+    [{
+        'text': 'Введение',
+        'style': 'heading',
+        'bold': True,
+        'level': 1,
+        'font_size': 22,
+        'space_after': 12,
+    }, {
+        'text': 'Основной текст абзаца.',
+        'style': 'normal',
+        'bold': False,
+        'italic': False,
+        'font_size': 12,
+        'space_after': 6,
+    }]
     
     Новые абзацы добавляются в конец документа. Существующие абзацы не удаляются и не изменяются.
     Это позволяет наращивать документ постепенно."""
@@ -376,81 +404,6 @@ def append_to_docx(ctx: RunContext[AssistantDeps], filename: str, paragraphs: li
 
 
 @agent.tool
-def modify_docx_paragraph(ctx: RunContext[AssistantDeps], filename: str, index: int, text: str, **formatting) -> str:
-    """Изменяет конкретный абзац в существующем .docx файле.
-    Аргументы:
-    - filename: имя файла .docx
-    - index: номер абзаца (0-первый, 1-второй, и т.д.)
-    - text: новый текст для абзаца
-    - formatting (опционально): любые параметры форматирования из create_docx (bold, italic, font_size, style, level, alignment, font_name, space_before, space_after, line_spacing)
-    
-    Изменяет только указанный абзац. Остальные абзацы и форматирование не затрагиваются."""
-    import os
-    from docx import Document
-    from docx.enum.text import WD_ALIGN_PARAGRAPH
-    from docx.shared import Pt, RGBColor
-    
-    workspace = os.getenv("AGENT_WORKSPACE", "/app/workspace")
-    filepath = os.path.join(workspace, filename)
-    
-    if not os.path.exists(filepath):
-        return f"Файл '{filename}' не найден."
-    
-    DEFAULT_FONT_SIZE = 12
-    DEFAULT_FONT_NAME = 'Calibri'
-    
-    try:
-        doc = Document(filepath)
-        
-        if index < 0 or index >= len(doc.paragraphs):
-            return f"Ошибка: индекс {index} вне диапазона (всего абзацев: {len(doc.paragraphs)})"
-        
-        # Сохраняем старый текст
-        old_text = doc.paragraphs[index].text
-        
-        # Очищаем абзац и добавляем новый текст
-        paragraph = doc.paragraphs[index]
-        paragraph.clear()
-        
-        # Создаём run
-        run = paragraph.add_run(text)
-        
-        # Применяем форматирование
-        bold = formatting.get('bold', run.font.bold or False)
-        italic = formatting.get('italic', run.font.italic or False)
-        font_size = formatting.get('font_size', DEFAULT_FONT_SIZE)
-        font_name = formatting.get('font_name', DEFAULT_FONT_NAME)
-        alignment = formatting.get('alignment', 'left')
-        space_before = formatting.get('space_before', 0)
-        space_after = formatting.get('space_after', 0)
-        line_spacing = formatting.get('line_spacing', 1.15)
-        
-        run.font.name = font_name
-        run.font.size = Pt(font_size)
-        run.font.bold = bold
-        run.font.italic = italic
-        run.font.color.rgb = RGBColor(0, 0, 0)
-        
-        align_map = {
-            'left': WD_ALIGN_PARAGRAPH.LEFT,
-            'center': WD_ALIGN_PARAGRAPH.CENTER,
-            'right': WD_ALIGN_PARAGRAPH.RIGHT,
-            'justify': WD_ALIGN_PARAGRAPH.JUSTIFY,
-        }
-        paragraph.paragraph_format.alignment = align_map.get(alignment, WD_ALIGN_PARAGRAPH.LEFT)
-        paragraph.paragraph_format.space_before = Pt(space_before)
-        paragraph.paragraph_format.space_after = Pt(space_after)
-        paragraph.paragraph_format.line_spacing = Pt(font_size * line_spacing)
-        
-        # Сохраняем
-        doc.save(filepath)
-        return f"Абзац {index + 1} в '{filename}' изменён: '{old_text}' -> '{text}'"
-    
-    except Exception as e:
-        return f"Ошибка при изменении: {str(e)}"
-
-
-@agent.tool
 def read_docx(ctx: RunContext[AssistantDeps], filename: str) -> str:
     """Читает содержимое .docx файла из папки /app/workspace.
     Аргумент filename: имя файла (с расширением .docx)
@@ -480,5 +433,7 @@ def read_docx(ctx: RunContext[AssistantDeps], filename: str) -> str:
     
     except Exception as e:
         return f"Ошибка при чтении файла: {str(e)}"
+
+
 
 
