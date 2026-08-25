@@ -74,72 +74,65 @@ def detect_fields(doc):
 
     Возвращает список словарей:
     {
-        'paragraph_idx': int,      # индекс абзаца в doc.paragraphs
-        'run_idx': int,            # индекс run в абзаце
-        'kind': str,               # KIND_*
-        'field_text': str,         # исходный текст поля
-        'label': str,              # смысловой контекст (текст до поля)
+        'id': str,                    # номер поля (1-based, для LLM-сопоставления)
+        'paragraph_idx': int,         # индекс абзаца в doc.paragraphs
+        'run_idxs': list[int],        # индексы run'ов поля (соседние run'ы группы)
+        'kind': str,                  # KIND_*
+        'field_text': str,            # исходный текст поля
+        'label': str,                 # смысловой контекст (текст до поля)
     }
+
+    Соседние run'ы одного поля (например, подчёркнутые пробелы, разбитые
+    на несколько run'ов) группируются в одно поле — это предотвращает
+    дублирование значения при заполнении.
     """
     fields = []
-    # Предварительно соберём все абзацы тела (не в таблицах) с их текстом,
-    # чтобы вычислять предыдущий непустой абзац для контекста.
     body_paragraphs = [p for p in doc.paragraphs if not _in_table(p)]
 
     for pi, para in enumerate(body_paragraphs):
-        # Контекст по умолчанию — текст абзаца до поля (считаем далее посимвольно)
         prefix_builder = ""
         for ri, run in enumerate(para.runs):
             run_text = run.text or ""
 
-            # --- Вид 1: последовательность подчёркиваний в тексте run'а ---
+            is_field = False
+            kind = None
+
             if UNDERSCORE_RE.search(run_text):
-                # Контекст = всё, что накопилось в абзаце до этого run'а
+                is_field, kind = True, KIND_UNDERSCORE
+            elif _run_is_underlined(run) and run_text.strip() != '':
+                is_field, kind = True, KIND_UNDERLINE
+            elif _run_is_underlined_spaces(run):
+                is_field, kind = True, KIND_SPACES
+
+            if is_field:
                 label = prefix_builder.strip()
                 if not label:
                     label = _find_prev_paragraph_context(body_paragraphs, pi)
-                fields.append({
-                    'paragraph_idx': pi,
-                    'run_idx': ri,
-                    'kind': KIND_UNDERSCORE,
-                    'field_text': run_text,
-                    'label': label or "начало документа",
-                })
+                label = label or "начало документа"
+
+                # Группировка: если предыдущее поле — в этом же абзаце, идёт подряд
+                # (соседний run) и имеет тот же контекст — это продолжение того же поля
+                if (fields and fields[-1]['paragraph_idx'] == pi
+                        and fields[-1]['run_idxs'][-1] == ri - 1
+                        and fields[-1]['label'] == label):
+                    fields[-1]['run_idxs'].append(ri)
+                    fields[-1]['field_text'] += run_text
+                else:
+                    fields.append({
+                        'paragraph_idx': pi,
+                        'run_idxs': [ri],
+                        'kind': kind,
+                        'field_text': run_text,
+                        'label': label,
+                    })
                 prefix_builder += run_text
                 continue
 
-            # --- Вид 2: подчёркнутый текст (не только пробелы) ---
-            if _run_is_underlined(run) and run_text.strip() != '':
-                label = prefix_builder.strip()
-                if not label:
-                    label = _find_prev_paragraph_context(body_paragraphs, pi)
-                fields.append({
-                    'paragraph_idx': pi,
-                    'run_idx': ri,
-                    'kind': KIND_UNDERLINE,
-                    'field_text': run_text,
-                    'label': label or "начало документа",
-                })
-                prefix_builder += run_text
-                continue
-
-            # --- Вид 3: подчёркнутые пробелы (пустое поле) ---
-            if _run_is_underlined_spaces(run):
-                label = prefix_builder.strip()
-                if not label:
-                    label = _find_prev_paragraph_context(body_paragraphs, pi)
-                fields.append({
-                    'paragraph_idx': pi,
-                    'run_idx': ri,
-                    'kind': KIND_SPACES,
-                    'field_text': run_text,
-                    'label': label or "начало документа",
-                })
-                prefix_builder += run_text
-                continue
-
-            # Обычный текст — накапливаем контекст
             prefix_builder += run_text
+
+    # Нумеруем поля (1-based) — эти номера использует LLM-сопоставление
+    for i, f in enumerate(fields, start=1):
+        f['id'] = str(i)
 
     return fields
 
@@ -176,38 +169,78 @@ def read_source_file(filepath: str) -> str:
 # 3. Заполнение полей
 # ---------------------------------------------------------------
 
+def _needs_space_before(text: str) -> bool:
+    """Нужен ли пробел перед значением: если перед полем нет пробела/табуляции."""
+    return bool(text) and not text[-1].isspace()
+
+
 def fill_fields_in_doc(doc, fields, values: dict) -> int:
-    """Заполняет найденные поля значениями. values: {номер_поля: значение}.
+    """Заполняет найденные поля значениями. values: {номер_поля (str): значение}.
+
+    Правила:
+    - Если перед полем в абзаце нет пробела — добавляем пробел перед значением
+      (чтобы текст не склеивался с предшествующим словом).
+    - Вставленный текст форматируется как подчёркнутый (underline) и НЕ жирный,
+      независимо от исходного форматирования поля.
+    - Соседние run'ы одного поля (группа) — значение вставляется в первый,
+      остальные очищаются (чтобы значение не дублировалось).
 
     Возвращает количество заполненных полей.
     """
     filled = 0
     body_paragraphs = [p for p in doc.paragraphs if not _in_table(p)]
 
-    for i, field in enumerate(fields, start=1):
-        value = (values.get(str(i)) or values.get(i) or "").strip()
+    for field in fields:
+        value = (values.get(field['id']) or values.get(str(field['id'])) or "").strip()
         if not value:
             continue  # значение не найдено — поле остаётся
 
         try:
             para = body_paragraphs[field['paragraph_idx']]
-            run = para.runs[field['run_idx']]
+            main_run = para.runs[field['run_idxs'][0]]
         except (IndexError, KeyError):
             continue
 
         kind = field['kind']
-        run_text = run.text or ""
+        run_text = main_run.text or ""
 
+        # --- Склеивание: добавляем пробел, если перед полем его нет ---
+        # Текст до поля внутри того же run'а (для подчёркиваний в середине run'а)
+        before_in_run = ""
         if kind == KIND_UNDERSCORE:
-            # Заменяем последовательность подчёркиваний на значение
+            m = UNDERSCORE_RE.search(run_text)
+            if m:
+                before_in_run = run_text[:m.start()]
+        # Текст до поля из предыдущих run'ов абзаца
+        text_before = ""
+        for ri in range(field['run_idxs'][0]):
+            try:
+                text_before += para.runs[ri].text or ""
+            except IndexError:
+                pass
+
+        if _needs_space_before(before_in_run) or _needs_space_before(text_before):
+            value = " " + value
+
+        # --- Вставка значения ---
+        if kind == KIND_UNDERSCORE:
             new_text = UNDERSCORE_RE.sub(value, run_text, count=1)
-            run.text = new_text
+            main_run.text = new_text
         elif kind == KIND_UNDERLINE:
-            # Меняем текст подчёркнутого run'а на значение (подчёркивание сохраняется)
-            run.text = value
+            main_run.text = value
         elif kind == KIND_SPACES:
-            # Заменяем пробелы на значение (подчёркивание сохраняется)
-            run.text = value
+            main_run.text = value
+
+        # --- Форматирование: underline + not bold ---
+        main_run.font.underline = True
+        main_run.font.bold = False
+
+        # --- Очищаем остальные run'ы группы (чтобы не дублировалось) ---
+        for ri in field['run_idxs'][1:]:
+            try:
+                para.runs[ri].text = ""
+            except IndexError:
+                pass
 
         filled += 1
 
