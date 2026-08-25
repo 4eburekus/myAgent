@@ -435,5 +435,39 @@ def read_docx(ctx: RunContext[AssistantDeps], filename: str) -> str:
         return f"Ошибка при чтении файла: {str(e)}"
 
 
+@agent.tool
+async def fill_docx_fields(ctx: RunContext[AssistantDeps], template: str, source_file: str) -> str:
+    """Заполняет поля в .docx-шаблоне данными из файла-источника.
+    
+    Аргументы:
+    - template: имя .docx-файла-шаблона в папке /app/workspace (например 'anketa.docx')
+    - source_file: имя файла с данными (.docx, .doc или .txt) в /app/workspace (например 'dannye.txt')
+    
+    Что делает:
+    1. Находит в шаблоне все «поля» (пропуски): последовательности подчёркиваний ____,
+       подчёркнутый текст, подчёркнутые пробелы. Поля ВНУТРИ таблиц не заполняются.
+    2. Для каждого поля определяет смысловой контекст (подпись перед ним, или текст
+       предыдущего абзаца, или начало документа).
+    3. Читает файл-источник и сопоставляет контекст полей с данными (по смыслу, через LLM:
+       'Имя' может соответствовать 'ФИО' и т.п.).
+    4. Вставляет значения в поля, сохраняя форматирование.
+    5. Сохраняет результат как копию: <template>_filled.docx (исходник не меняется).
+    
+    Возвращает отчёт: сколько полей найдено и заполнено, что именно вставлено."""
+    import os
+    from docx_fields import fill_docx_fields as _fill
+
+    workspace = os.getenv("AGENT_WORKSPACE", "/app/workspace")
+
+    # Защита от выхода за пределы workspace
+    template_path = os.path.join(workspace, os.path.basename(template))
+    source_path = os.path.join(workspace, os.path.basename(source_file))
+
+    if not template.lower().endswith('.docx'):
+        return "Ошибка: шаблон должен быть .docx файлом."
+
+    return await _fill(template_path, source_path)
+
+
 
 

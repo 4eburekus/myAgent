@@ -10,6 +10,7 @@ COPY backend/config.py .
 COPY backend/tools.py .
 COPY backend/server.py .
 COPY backend/sandbox.py .
+COPY backend/docx_fields.py .
 
 EXPOSE 8001
 
