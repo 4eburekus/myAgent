@@ -69,6 +69,18 @@ def _run_is_underlined_spaces(run) -> bool:
     return _run_is_underlined(run) and run.text.strip() == '' and len(run.text) > 0
 
 
+def _only_spaces_between(para, start_ri, end_ri):
+    """Все run'ы от start_ri до end_ri (не включая end_ri) — только пробелы/пустые."""
+    for ri in range(start_ri, end_ri):
+        try:
+            txt = para.runs[ri].text or ""
+        except IndexError:
+            return False
+        if txt.strip() != '':
+            return False
+    return True
+
+
 def detect_fields(doc):
     """Ищет поля в абзацах документа (вне таблиц).
 
@@ -110,13 +122,19 @@ def detect_fields(doc):
                     label = _find_prev_paragraph_context(body_paragraphs, pi)
                 label = label or "начало документа"
 
-                # Группировка: если предыдущее поле — в этом же абзаце, идёт подряд
-                # (соседний run) и имеет тот же контекст — это продолжение того же поля
+                # Группировка: если предыдущее поле — в этом же абзаце, и между
+                # ним и текущим run'ом только пробелы/пусто — это продолжение
+                # того же поля (подчёркивания/пробелы часто разбиты на несколько
+                # run'ов с пробелом-разделителем). Иначе LLM заполнит каждый
+                # run отдельно → дублирование значения и двойные пробелы.
                 if (fields and fields[-1]['paragraph_idx'] == pi
-                        and fields[-1]['run_idxs'][-1] == ri - 1
-                        and fields[-1]['label'] == label):
-                    fields[-1]['run_idxs'].append(ri)
-                    fields[-1]['field_text'] += run_text
+                        and _only_spaces_between(para, fields[-1]['run_idxs'][-1] + 1, ri)):
+                    prev = fields[-1]
+                    # Добавляем промежуточные пробельные run'ы и текущий в группу
+                    # (при заполнении они будут очищены, чтобы не дублировалось)
+                    for mri in range(prev['run_idxs'][-1] + 1, ri + 1):
+                        prev['run_idxs'].append(mri)
+                    prev['field_text'] += run_text
                 else:
                     fields.append({
                         'paragraph_idx': pi,
