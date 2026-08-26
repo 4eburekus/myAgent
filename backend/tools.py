@@ -79,7 +79,7 @@ def run_console_command(ctx: RunContext[AssistantDeps], command: str) -> str:
 
 @agent.tool
 def set_chat_title(ctx: RunContext[AssistantDeps], title: str) -> str:
-    """Сохраняет название чата. Вызови в начале разговора, когда понял тему диалога.
+    """Изменяет название чата.
     Используй только если пользователь просит сменить название чата.
     Аргумент title: короткое название (3-6 слов), отражающее суть разговора."""
     from config import get_db
@@ -137,3 +137,390 @@ def get_weather(ctx: RunContext[AssistantDeps], city: str) -> str:
         return f"Сейчас в городе {city_name}: {temp}°C"
     except Exception as e:
         return f"Ошибка при получении погоды: {e}"
+
+
+@agent.tool
+def create_docx(ctx: RunContext[AssistantDeps], filename: str, title: str, paragraphs: list) -> str:
+    """Создаёт новый .docx файл с поддержкой форматирования.
+    Аргументы:
+    - filename: имя файла с расширением .docx
+    - title: заголовок документа (строка)
+    - paragraphs: список словарей с параметрами абзацев. Каждый словарь может содержать:
+        * 'text' (str) — текст абзаца (обязательно)
+        * 'style' (str) — стиль: 'heading' для заголовка, 'normal' для обычного текста
+        * 'bold' (bool) — жирный текст (по умолчанию False)
+        * 'italic' (bool) — курсив (по умолчанию False)
+        * 'level' (int) — уровень заголовка 1-9 (по умолчанию 1)
+        * 'alignment' (str) — 'left', 'center', 'right', 'justify'
+        * 'font_size' (int) — размер шрифта в пунктах (по умолчанию 12 для normal, 14-26 для heading)
+        * 'font_name' (str) — имя шрифта (по умолчанию 'Calibri')
+        * 'space_before' (int) — отступ перед абзацем в пунктах (по умолчанию 0)
+        * 'space_after' (int) — отступ после абзаца в пунктах (по умолчанию 6)
+        * 'line_spacing' (float) — междустрочный интервал (по умолчанию 1.15)
+    
+    Пример:
+    [{
+        'text': 'Введение',
+        'style': 'heading',
+        'bold': True,
+        'level': 1,
+        'font_size': 22,
+        'space_after': 12,
+    }, {
+        'text': 'Основной текст абзаца.',
+        'style': 'normal',
+        'bold': False,
+        'italic': False,
+        'font_size': 12,
+        'space_after': 6,
+    }]"""
+    import os
+    from docx import Document
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Pt, RGBColor, Cm
+    
+    # Рабочая директория
+    workspace = os.getenv("AGENT_WORKSPACE", "/app/workspace")
+    filepath = os.path.join(workspace, filename)
+    
+    # Проверяем, что имя файла заканчивается на .docx
+    if not filename.lower().endswith('.docx'):
+        return "Ошибка: имя файла должно заканчиваться на .docx"
+    
+    # Проверяем, что paragraphs — это список словарей
+    if not isinstance(paragraphs, list):
+        return "Ошибка: аргумент paragraphs должен быть списком"
+    
+    # Определяем размер шрифта по умолчанию
+    DEFAULT_FONT_SIZE = 12
+    DEFAULT_FONT_NAME = 'Calibri'
+    
+    try:
+        # Создаём документ
+        doc = Document()
+        
+        # Устанавливаем шрифт по умолчанию для всего документа
+        default_style = doc.styles['Normal']
+        default_font = default_style.font
+        default_font.name = DEFAULT_FONT_NAME
+        default_font.size = Pt(DEFAULT_FONT_SIZE)
+        default_style.paragraph_format.space_after = Pt(6)
+        default_style.paragraph_format.space_before = Pt(0)
+        default_style.paragraph_format.line_spacing = Pt(DEFAULT_FONT_SIZE * 1.15)
+        
+        # Добавляем заголовок документа (как заголовок уровня 1)
+        title_para = doc.add_heading(title, level=1)
+        title_run = title_para.runs[0]
+        title_run.font.bold = True
+        title_run.font.size = Pt(24)
+        title_run.font.color.rgb = RGBColor(0, 51, 102)  # Тёмно-синий цвет
+        
+        # Добавляем абзацы
+        for para in paragraphs:
+            if not isinstance(para, dict):
+                return f"Ошибка: каждый абзац должен быть словарём. Получено: {type(para).__name__}"
+            
+            text = para.get('text', '')
+            if not text:
+                continue
+            
+            # Определяем стиль
+            style = para.get('style', 'normal')
+            bold = para.get('bold', False)
+            italic = para.get('italic', False)
+            level = para.get('level', 1)
+            alignment = para.get('alignment', 'left')
+            font_size = para.get('font_size', DEFAULT_FONT_SIZE)
+            font_name = para.get('font_name', DEFAULT_FONT_NAME)
+            space_before = para.get('space_before', 0)
+            space_after = para.get('space_after', 0)
+            line_spacing = para.get('line_spacing', 1.15)
+            
+            # Создаём абзац
+            p = doc.add_paragraph()
+            
+            # Добавляем текст
+            run = p.add_run(text)
+            
+            # Устанавливаем шрифт
+            run.font.name = font_name
+            run.font.size = Pt(font_size)
+            
+            # Устанавливаем форматирование
+            run.font.bold = bold
+            run.font.italic = italic
+            run.font.color.rgb = RGBColor(0, 0, 0)  # Чёрный цвет
+            
+            # Устанавливаем выравнивание
+            align_map = {
+                'left': WD_ALIGN_PARAGRAPH.LEFT,
+                'center': WD_ALIGN_PARAGRAPH.CENTER,
+                'right': WD_ALIGN_PARAGRAPH.RIGHT,
+                'justify': WD_ALIGN_PARAGRAPH.JUSTIFY,
+            }
+            p.paragraph_format.alignment = align_map.get(alignment, WD_ALIGN_PARAGRAPH.LEFT)
+            
+            # Устанавливаем отступы
+            p.paragraph_format.space_before = Pt(space_before)
+            p.paragraph_format.space_after = Pt(space_after)
+            p.paragraph_format.line_spacing = Pt(font_size * line_spacing)
+            
+            # Если заголовок — используем заголовочный стиль
+            if style == 'heading':
+                p.clear()
+                heading_para = doc.add_heading(text, level=min(level, 9))
+                heading_run = heading_para.runs[0]
+                heading_run.font.color.rgb = RGBColor(0, 51, 102)
+                # Обновляем форматирование заголовка
+                heading_run.font.bold = bold or True
+                heading_run.font.italic = italic
+                heading_run.font.size = Pt(font_size)
+        
+        # Сохраняем файл
+        doc.save(filepath)
+        return f"Файл '{filename}' успешно создан с {len(paragraphs) + 1} абзацами (включая заголовок) в {workspace}"
+    
+    except Exception as e:
+        return f"Ошибка при создании файла: {str(e)}"
+
+
+@agent.tool
+def append_to_docx(ctx: RunContext[AssistantDeps], filename: str, paragraphs: list) -> str:
+    """Добавляет новые абзацы в существующий .docx файл.
+    Аргументы:
+    - filename: имя существующего файла .docx
+    - paragraphs: список словарей с параметрами абзацев. Каждый словарь может содержать:
+        * 'text' (str) — текст абзаца (обязательно)
+        * 'style' (str) — стиль: 'heading' для заголовка, 'normal' для обычного текста
+        * 'bold' (bool) — жирный текст (по умолчанию False)
+        * 'italic' (bool) — курсив (по умолчанию False)
+        * 'level' (int) — уровень заголовка 1-9 (по умолчанию 1)
+        * 'alignment' (str) — 'left', 'center', 'right', 'justify'
+        * 'font_size' (int) — размер шрифта в пунктах (по умолчанию 12 для normal, 14-26 для heading)
+        * 'font_name' (str) — имя шрифта (по умолчанию 'Calibri')
+        * 'space_before' (int) — отступ перед абзацем в пунктах (по умолчанию 0)
+        * 'space_after' (int) — отступ после абзаца в пунктах (по умолчанию 6)
+        * 'line_spacing' (float) — междустрочный интервал (по умолчанию 1.15)
+    
+    Пример:
+    [{
+        'text': 'Введение',
+        'style': 'heading',
+        'bold': True,
+        'level': 1,
+        'font_size': 22,
+        'space_after': 12,
+    }, {
+        'text': 'Основной текст абзаца.',
+        'style': 'normal',
+        'bold': False,
+        'italic': False,
+        'font_size': 12,
+        'space_after': 6,
+    }]
+    
+    Новые абзацы добавляются в конец документа. Существующие абзацы не удаляются и не изменяются.
+    Это позволяет наращивать документ постепенно."""
+    import os
+    from docx import Document
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Pt, RGBColor
+    
+    workspace = os.getenv("AGENT_WORKSPACE", "/app/workspace")
+    filepath = os.path.join(workspace, filename)
+    
+    # Проверяем, что файл существует
+    if not os.path.exists(filepath):
+        return f"Файл '{filename}' не найден."
+    
+    if not isinstance(paragraphs, list):
+        return "Ошибка: аргумент paragraphs должен быть списком"
+    
+    DEFAULT_FONT_SIZE = 12
+    DEFAULT_FONT_NAME = 'Calibri'
+    
+    try:
+        # Открываем существующий документ
+        doc = Document(filepath)
+        
+        # Получаем количество абзацев ДО добавления
+        old_para_count = len(doc.paragraphs)
+        
+        # Добавляем каждый новый абзац
+        for para in paragraphs:
+            if not isinstance(para, dict):
+                return f"Ошибка: каждый абзац должен быть словарём"
+            
+            text = para.get('text', '')
+            if not text:
+                continue
+            
+            style = para.get('style', 'normal')
+            bold = para.get('bold', False)
+            italic = para.get('italic', False)
+            level = para.get('level', 1)
+            alignment = para.get('alignment', 'left')
+            font_size = para.get('font_size', DEFAULT_FONT_SIZE)
+            font_name = para.get('font_name', DEFAULT_FONT_NAME)
+            space_before = para.get('space_before', 0)
+            space_after = para.get('space_after', 0)
+            line_spacing = para.get('line_spacing', 1.15)
+            
+            if style == 'heading':
+                # Создаём заголовочный абзац
+                heading = doc.add_heading(text, level=min(level, 9))
+                run = heading.runs[0]
+                run.font.color.rgb = RGBColor(0, 51, 102)
+                run.font.bold = True
+                run.font.size = Pt(font_size)
+            else:
+                # Обычный абзац
+                p = doc.add_paragraph()
+                run = p.add_run(text)
+                run.font.name = font_name
+                run.font.size = Pt(font_size)
+                run.font.bold = bold
+                run.font.italic = italic
+                run.font.color.rgb = RGBColor(0, 0, 0)
+                
+                align_map = {
+                    'left': WD_ALIGN_PARAGRAPH.LEFT,
+                    'center': WD_ALIGN_PARAGRAPH.CENTER,
+                    'right': WD_ALIGN_PARAGRAPH.RIGHT,
+                    'justify': WD_ALIGN_PARAGRAPH.JUSTIFY,
+                }
+                p.paragraph_format.alignment = align_map.get(alignment, WD_ALIGN_PARAGRAPH.LEFT)
+                p.paragraph_format.space_before = Pt(space_before)
+                p.paragraph_format.space_after = Pt(space_after)
+                p.paragraph_format.line_spacing = Pt(font_size * line_spacing)
+        
+        # Сохраняем файл
+        doc.save(filepath)
+        added_count = len(doc.paragraphs) - old_para_count
+        return f"Успешно добавлено {added_count} абзацев в '{filename}'. Всего абзацев: {len(doc.paragraphs)}."
+    
+    except Exception as e:
+        return f"Ошибка при добавлении: {str(e)}"
+
+
+@agent.tool
+def read_docx(ctx: RunContext[AssistantDeps], filename: str) -> str:
+    """Читает содержимое .docx файла из папки /app/workspace.
+    Аргумент filename: имя файла (с расширением .docx)
+    Возвращает текстовое содержимое файла."""
+    import os
+    from docx import Document
+    
+    # Рабочая директория
+    workspace = os.getenv("AGENT_WORKSPACE", "/app/workspace")
+    filepath = os.path.join(workspace, filename)
+    
+    # Проверяем, что файл существует
+    if not os.path.exists(filepath):
+        return f"Файл '{filename}' не найден."
+    
+    try:
+        # Открываем документ
+        doc = Document(filepath)
+        
+        # Собираем все абзацы
+        text_parts = []
+        for para in doc.paragraphs:
+            if para.text.strip():  # пропускаем пустые абзацы
+                text_parts.append(para.text)
+        
+        return "\n\n".join(text_parts)
+    
+    except Exception as e:
+        return f"Ошибка при чтении файла: {str(e)}"
+
+
+@agent.tool
+async def fill_docx_fields(ctx: RunContext[AssistantDeps], template: str, source_file: str) -> str:
+    """Заполняет поля в .docx-шаблоне данными из файла-источника.
+    
+    Аргументы:
+    - template: имя .docx-файла-шаблона в папке /app/workspace (например 'anketa.docx')
+    - source_file: имя файла с данными (.docx, .doc или .txt) в /app/workspace (например 'dannye.txt')
+    
+    Что делает:
+    1. Находит в шаблоне все «поля» (пропуски): последовательности подчёркиваний ____,
+       подчёркнутый текст, подчёркнутые пробелы. Поля ВНУТРИ таблиц не заполняются.
+    2. Для каждого поля определяет смысловой контекст (подпись перед ним, или текст
+       предыдущего абзаца, или начало документа).
+    3. Читает файл-источник и сопоставляет контекст полей с данными (по смыслу, через LLM:
+       'Имя' может соответствовать 'ФИО' и т.п.).
+    4. Вставляет значения в поля, сохраняя форматирование.
+    5. Сохраняет результат как копию: <template>_filled.docx (исходник не меняется).
+    
+    Возвращает отчёт: сколько полей найдено и заполнено, что именно вставлено."""
+    import os
+    from docx_fields import fill_docx_fields as _fill
+
+    workspace = os.getenv("AGENT_WORKSPACE", "/app/workspace")
+
+    # Защита от выхода за пределы workspace
+    template_path = os.path.join(workspace, os.path.basename(template))
+    source_path = os.path.join(workspace, os.path.basename(source_file))
+
+    if not template.lower().endswith('.docx'):
+        return "Ошибка: шаблон должен быть .docx файлом."
+
+    return await _fill(template_path, source_path)
+
+
+@agent.tool
+def read_excel(ctx: RunContext[AssistantDeps], filename: str, sheet: str = "", max_rows: int = 100) -> str:
+    """Читает содержимое Excel-файла (.xlsx или .xls) из папки /app/workspace.
+    
+    Аргументы:
+    - filename: имя файла (например 'data.xlsx' или 'data.xls')
+    - sheet: имя листа (если не указано — берётся первый лист)
+    - max_rows: максимальное количество строк для вывода (по умолчанию 100)
+    
+    Возвращает содержимое в виде текстовой таблицы: лист, количество строк/колонок,
+    заголовки и строки данных."""
+    from excel_utils import read_excel as _read
+    return _read(filename, sheet, max_rows)
+
+
+@agent.tool
+def create_excel(ctx: RunContext[AssistantDeps], filename: str, headers: list, rows: list, sheet_name: str = "Лист1") -> str:
+    """Создаёт новый Excel-файл (.xlsx) в папке /app/workspace.
+    
+    Аргументы:
+    - filename: имя файла с расширением .xlsx (например 'data.xlsx')
+    - headers: список названий колонок (например ['Имя', 'Возраст'])
+    - rows: список строк; каждая строка — список значений (например [['Иван', 30], ['Пётр', 25]])
+    - sheet_name: название листа (по умолчанию 'Лист1')
+    
+    Заголовки делаются жирными, ширина колонок подстраивается автоматически."""
+    from excel_utils import create_excel as _create
+    return _create(filename, headers, rows, sheet_name)
+
+
+@agent.tool
+def edit_excel(ctx: RunContext[AssistantDeps], filename: str, action: str, sheet: str = "", **kwargs) -> str:
+    """Редактирует существующий Excel-файл (.xlsx или .xls) в папке /app/workspace.
+    
+    Аргументы:
+    - filename: имя файла
+    - action: тип операции (см. ниже)
+    - sheet: имя листа (если не указано — первый лист)
+    
+    Действия (action) и их параметры:
+    - set_cell: cell='A1', value=<значение> — записать значение в ячейку
+    - add_row: row=[значения...] — добавить строку в конец
+    - add_column: header='Название', values=[значения...] — добавить колонку
+    - update_row: row_idx=<номер строки, начиная с 1>, values=[значения...] — заменить строку
+    - clear_cell: cell='B3' — очистить ячейку
+    - rename_sheet: new_name='Новое имя' — переименовать лист
+    
+    При редактировании форматирование остальных ячеек сохраняется. Файлы .xls
+    конвертируются в .xlsx (результат сохраняется рядом с тем же именем, но .xlsx)."""
+    from excel_utils import edit_excel as _edit
+    return _edit(filename, action, sheet, **kwargs)
+
+
+
+
