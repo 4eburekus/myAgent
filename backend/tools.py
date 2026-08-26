@@ -469,5 +469,58 @@ async def fill_docx_fields(ctx: RunContext[AssistantDeps], template: str, source
     return await _fill(template_path, source_path)
 
 
+@agent.tool
+def read_excel(ctx: RunContext[AssistantDeps], filename: str, sheet: str = "", max_rows: int = 100) -> str:
+    """Читает содержимое Excel-файла (.xlsx или .xls) из папки /app/workspace.
+    
+    Аргументы:
+    - filename: имя файла (например 'data.xlsx' или 'data.xls')
+    - sheet: имя листа (если не указано — берётся первый лист)
+    - max_rows: максимальное количество строк для вывода (по умолчанию 100)
+    
+    Возвращает содержимое в виде текстовой таблицы: лист, количество строк/колонок,
+    заголовки и строки данных."""
+    from excel_utils import read_excel as _read
+    return _read(filename, sheet, max_rows)
+
+
+@agent.tool
+def create_excel(ctx: RunContext[AssistantDeps], filename: str, headers: list, rows: list, sheet_name: str = "Лист1") -> str:
+    """Создаёт новый Excel-файл (.xlsx) в папке /app/workspace.
+    
+    Аргументы:
+    - filename: имя файла с расширением .xlsx (например 'data.xlsx')
+    - headers: список названий колонок (например ['Имя', 'Возраст'])
+    - rows: список строк; каждая строка — список значений (например [['Иван', 30], ['Пётр', 25]])
+    - sheet_name: название листа (по умолчанию 'Лист1')
+    
+    Заголовки делаются жирными, ширина колонок подстраивается автоматически."""
+    from excel_utils import create_excel as _create
+    return _create(filename, headers, rows, sheet_name)
+
+
+@agent.tool
+def edit_excel(ctx: RunContext[AssistantDeps], filename: str, action: str, sheet: str = "", **kwargs) -> str:
+    """Редактирует существующий Excel-файл (.xlsx или .xls) в папке /app/workspace.
+    
+    Аргументы:
+    - filename: имя файла
+    - action: тип операции (см. ниже)
+    - sheet: имя листа (если не указано — первый лист)
+    
+    Действия (action) и их параметры:
+    - set_cell: cell='A1', value=<значение> — записать значение в ячейку
+    - add_row: row=[значения...] — добавить строку в конец
+    - add_column: header='Название', values=[значения...] — добавить колонку
+    - update_row: row_idx=<номер строки, начиная с 1>, values=[значения...] — заменить строку
+    - clear_cell: cell='B3' — очистить ячейку
+    - rename_sheet: new_name='Новое имя' — переименовать лист
+    
+    При редактировании форматирование остальных ячеек сохраняется. Файлы .xls
+    конвертируются в .xlsx (результат сохраняется рядом с тем же именем, но .xlsx)."""
+    from excel_utils import edit_excel as _edit
+    return _edit(filename, action, sheet, **kwargs)
+
+
 
 
