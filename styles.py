@@ -5,19 +5,6 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
-def set_paragraph_border(style):
-    """Добавляет одинарную рамку 0.25 пт вокруг абзаца."""
-    pPr = style._element.get_or_add_pPr()
-    pBdr = OxmlElement('w:pBdr')
-    for border in ['top', 'left', 'bottom', 'right']:
-        node = OxmlElement(f'w:{border}')
-        node.set(qn('w:val'), 'single')
-        node.set(qn('w:sz'), '2')  # 0.25 pt (в 1/8 пункта)
-        node.set(qn('w:space'), '4')
-        node.set(qn('w:color'), 'auto')
-        pBdr.append(node)
-    pPr.append(pBdr)
-
 doc = Document()
 styles = doc.styles
 
@@ -73,6 +60,18 @@ code.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
 code.paragraph_format.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
 code.paragraph_format.line_spacing = 1.08
 code.paragraph_format.widow_control = True
+def set_paragraph_border(style):
+    """Добавляет одинарную рамку 0.25 пт вокруг абзаца."""
+    pPr = style._element.get_or_add_pPr()
+    pBdr = OxmlElement('w:pBdr')
+    for border in ['top', 'left', 'bottom', 'right']:
+        node = OxmlElement(f'w:{border}')
+        node.set(qn('w:val'), 'single')
+        node.set(qn('w:sz'), '2')  # 0.25 pt (в 1/8 пункта)
+        node.set(qn('w:space'), '4')
+        node.set(qn('w:color'), 'auto')
+        pBdr.append(node)
+    pPr.append(pBdr)
 set_paragraph_border(code)
 code.quick_style = True
 
@@ -87,7 +86,7 @@ img_style.paragraph_format.keep_with_next = True
 img_style.quick_style = True
 
 # --- 5. СТИЛИ: Списки (Имитация) ---
-# listBig: Текст на 1.52, Номер на 0.89
+# listBig
 l_big = styles.add_style('listBig', WD_STYLE_TYPE.PARAGRAPH)
 l_big.base_style = nt
 l_big.paragraph_format.left_indent = Cm(1)
@@ -95,7 +94,7 @@ l_big.paragraph_format.first_line_indent = Cm(-0.63)
 l_big.paragraph_format.space_before = Pt(0)
 l_big.paragraph_format.space_after = Pt(0)
 
-# listMid: Текст смещен на +0.8см от Big
+# listMid
 l_mid = styles.add_style('listMid', WD_STYLE_TYPE.PARAGRAPH)
 l_mid.base_style = nt
 l_mid.paragraph_format.left_indent = Cm(1 + 0.8)
@@ -103,7 +102,7 @@ l_mid.paragraph_format.first_line_indent = Cm(-0.63)
 l_mid.paragraph_format.space_before = Pt(0)
 l_mid.paragraph_format.space_after = Pt(0)
 
-# listSmall: Текст смещен на +1.2см от Big
+# listSmall
 l_small = styles.add_style('listSmall', WD_STYLE_TYPE.PARAGRAPH)
 l_small.base_style = nt
 l_small.paragraph_format.left_indent = Cm(1 + 1.2)
@@ -151,13 +150,25 @@ doc.add_paragraph("Заголовок третьего уровня", style='hea
 # Картинка
 # Расчет ширины: стандартное поле (~16см) + компенсация ваших отступов (1см + 0.25см)
 available_width = Cm(16) + Cm(1) + Cm(0.25) # Примерный расчет для стандартных полей
-available_height = Cm(21) # Чтобы под картинкой во всю страницу уместилась подпись
+# available_height = Cm(21) # Чтобы под картинкой во всю страницу уместилась подпись
+
+def add_picture(doc, image_path, text_picture, available_width=Cm(17.25), style='image'):
+    f
+    f
+    f
+    f
+add_picture(doc, 'BongoCat_cugDoJ6Ueu.png')
 
 try:
     p_img = doc.add_paragraph(style='image')
     run = p_img.add_run()
     # При добавлении картинки лучше указывать только ширину, чтобы сохранить пропорции
-    run.add_picture('stet2.jpg', width=available_width, height=available_height) 
+    run.add_picture('BongoCat_cugDoJ6Ueu.png', width=available_width)
+    doc.add_paragraph("Картинка 1.", style='image')
+    doc.add_paragraph("Конец тестового документа.", style='normalText')
+
+    run.add_picture('Картинка.jpg', width=available_width) 
+
 except Exception as e:
     doc.add_paragraph(f"Здесь должна быть картинка (Файл stet2.jpg не найден)", style='normalText')
 
