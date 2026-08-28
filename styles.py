@@ -161,6 +161,10 @@ doc.add_paragraph("3. большой элемент списка 3", style='list
 
 doc.add_paragraph("Заголовок третьего уровня", style='heading3')
 
+# ---------------------------------------------------------
+# ------------Работа с картинками--------------------------
+# ---------------------------------------------------------
+
 # Для добавления картинки
 import os
 from io import BytesIO
@@ -180,6 +184,9 @@ def add_image(doc, image_path, available_width_cm=17.25, max_height_cm=21.0, sty
         # os.path.basename берет 'Название.png', а splitext отделяет '.png'
         file_name = os.path.basename(image_path)
         clean_name = os.path.splitext(file_name)[0]
+
+        if len(clean_name) >= 41:
+            raise ValueError(f"Название файла '{clean_name}' слишком длинное ({len(clean_name)} симв.). Максимум 41.")
 
         with Image.open(image_path) as img:
             orig_w, orig_h = img.size # Размер в пикселях
@@ -207,12 +214,144 @@ def add_image(doc, image_path, available_width_cm=17.25, max_height_cm=21.0, sty
         caption_text = f"Рис. {img_counter}. {clean_name}."
         doc.add_paragraph(caption_text, style=style)
     except Exception as e:
-        doc.add_paragraph(f"Здесь должен быть\nРис. {img_counter}. {clean_name}.", style='error')
+        name_for_error = clean_name if 'clean_name' in locals() else image_path
+        error_message = (
+            f"ОШИБКА В РИС. {img_counter}: {str(e)}\n"
+        )
+        doc.add_paragraph(error_message, style='error')
 
 doc.add_paragraph("Ниже следуют картинки.", style='normalText')
 add_image(doc, 'stet2.jpg')
 add_image(doc, 'BongoCat_cugDoJ6Ueu.png')
-doc.add_paragraph("Конец тестового документа.", style='normalText')
 
+
+
+
+
+
+
+
+# ---------------------------------------------------------
+# ------------Работа с таблицами--------------------------
+# ---------------------------------------------------------
+
+
+from docx.enum.table import WD_ALIGN_VERTICAL
+
+
+# --- Функция для закраски фона ячеек ---
+def set_cell_shading(cell, color):
+    """color: строка 'RRGGBB', например 'D9D9D9'"""
+    tcPr = cell._tc.get_or_add_tcPr()
+    shd = OxmlElement('w:shd')
+    shd.set(qn('w:val'), 'clear')
+    shd.set(qn('w:color'), 'auto')
+    shd.set(qn('w:fill'), color)
+    tcPr.append(shd)
+
+
+# --- 1. СТИЛИ ДЛЯ ТЕКСТА ВНУТРИ ТАБЛИЦЫ ---
+
+# Стиль для шапки таблицы
+t_header = styles.add_style('tableHeader', WD_STYLE_TYPE.PARAGRAPH)
+t_header.font.name = 'Times New Roman'
+t_header.font.size = Pt(12)
+t_header.font.bold = True
+t_header.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
+t_header.paragraph_format.space_before = Pt(0)
+t_header.paragraph_format.space_after = Pt(0)
+
+# Стиль для обычных ячеек
+t_body = styles.add_style('tableBody', WD_STYLE_TYPE.PARAGRAPH)
+t_body.font.name = 'Times New Roman'
+t_body.font.size = Pt(12)
+t_body.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
+t_body.paragraph_format.space_before = Pt(2)
+t_body.paragraph_format.space_after = Pt(2)
+
+# --- 2. СОЗДАНИЕ ТАБЛИЦЫ ---
+
+# Данные для теста
+data = [
+    ["№", "Наименование параметра", "Значение", "Примечание"], # Эта строка - шапка таблицы
+    ["1", "Скорость обработки", "150 км/ч"],
+    ["2", "Температура среды", "+22 °C", "Стабильно"],
+    ["3", "Давление в системе", "101 кПа", "Оптимально"],
+]
+
+# Создаем таблицу
+table = doc.add_table(rows=len(data), cols=len(data[0]))
+table.style = 'Table Grid' # Базовая сетка
+
+# Настройка ширины всей таблицы
+# Учитывая ваш left_indent = -1см, мы можем сделать таблицу шире стандартной.
+# Стандартная область печати ~16.5см. С вашими правками сделаем 18см.
+table.allow_autofit = False 
+total_width = Cm(18)
+
+# Установка пропорций столбцов (в процентах от 18см)
+widths = [Cm(1), Cm(7), Cm(4), Cm(6)]
+for i, width in enumerate(widths):
+    for cell in table.columns[i].cells:
+        cell.width = width
+
+# --- 3. ЗАПОЛНЕНИЕ И ФОРМАТИРОВАНИЕ ---
+
+for r_idx, row_data in enumerate(data):
+    for c_idx, text in enumerate(row_data):
+        cell = table.cell(r_idx, c_idx)
+        cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+        
+        # Очищаем ячейку и добавляем параграф с нужным стилем
+        p = cell.paragraphs[0]
+        p.text = text
+        
+        if r_idx == 0:
+            # Оформляем шапку
+            p.style = 'tableHeader'
+            set_cell_shading(cell, 'E6E6E6') # Светло-серый фон
+        else:
+            # Оформляем тело
+            p.style = 'tableBody'
+            if c_idx == 0 or c_idx == 2: # Центрируем № и Значение
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+# --- 4. ПРИВЯЗКА К ПОЛЯМ ---
+# Чтобы таблица с отрицательным отступом -1см стояла ровно там же, где ваш текст normalText:
+tbl = table._tbl
+tblPr = tbl.tblPr # Прямой доступ к свойствам
+if tblPr is None:
+    tblPr = OxmlElement('w:tblPr')
+    tbl.insert(0, tblPr)
+
+# Установка отступа
+tblInd = OxmlElement('w:tblInd')
+tblInd.set(qn('w:w'), '-567') # -1 см в твипах (1 см = 567 twips)
+tblInd.set(qn('w:type'), 'dxa')
+tblPr.append(tblInd)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+doc.add_paragraph("Конец тестового документа.", style='normalText')
 doc.save('final_combined_document.docx')
 print("Документ успешно сохранен.")
