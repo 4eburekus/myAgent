@@ -45,7 +45,7 @@ class AssistantDeps:
     chat_id: str = ""
 
 agent = Agent(
-    model='openai:RedHatAi/Qwen3.6-35B-A3B-NVFP4',  # модель LLM
+    model='openai:qwen/qwen3.8-flash',  # модель LLM
     deps_type=AssistantDeps,  # тип зависимостей
     system_prompt=(
         "Ты — ИИ-ассистент. Правила:\n"
