@@ -1,9 +1,10 @@
 from docx import Document
 from docx.shared import Pt, Cm, RGBColor
 from docx.enum.style import WD_STYLE_TYPE
-from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING, WD_COLOR_INDEX
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+
 
 doc = Document()
 styles = doc.styles
@@ -110,6 +111,19 @@ l_small.paragraph_format.first_line_indent = Cm(-0.63)
 l_small.paragraph_format.space_before = Pt(0)
 l_small.paragraph_format.space_after = Pt(0)
 
+# Ошибка в коде
+er = styles.add_style('error', WD_STYLE_TYPE.PARAGRAPH)
+er.base_style = styles['Normal']
+er.font.name = 'Times New Roman'
+er.font.size = Pt(26)
+er.font.highlight_color = WD_COLOR_INDEX.RED
+er.font.bold = True
+er.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
+er.next_paragraph_style = styles['Normal']
+
+
+
+
 # --- ТЕСТОВОЕ ЗАПОЛНЕНИЕ ---
 
 doc.add_paragraph("Заголовок первого уровня", style='heading1')
@@ -147,31 +161,57 @@ doc.add_paragraph("3. большой элемент списка 3", style='list
 
 doc.add_paragraph("Заголовок третьего уровня", style='heading3')
 
-# Картинка
-# Расчет ширины: стандартное поле (~16см) + компенсация ваших отступов (1см + 0.25см)
-available_width = Cm(16) + Cm(1) + Cm(0.25) # Примерный расчет для стандартных полей
-# available_height = Cm(21) # Чтобы под картинкой во всю страницу уместилась подпись
+# Для добавления картинки
+import os
+from io import BytesIO
+from PIL import Image
 
-def add_picture(doc, image_path, text_picture, available_width=Cm(17.25), style='image'):
-    f
-    f
-    f
-    f
-add_picture(doc, 'BongoCat_cugDoJ6Ueu.png')
+img_counter = 0
+def add_image(doc, image_path, available_width_cm=17.25, max_height_cm=21.0, style='image'):
+    """Вставляет в документ картинку и ее подпись с указанием порядкового номера. Функция зависит от глобальной переменной.
+    doc - переменная документа,
+    image_path - название файла,
+    available_width_cm - предпочтительная ширина (задана под поля документа),
+    max_height_cm - максимальная высота (если больше - картинка обрезается снизу),
+    style - название стиля специально созданного под вставку картинки."""
+    global img_counter
+    img_counter += 1
+    try:
+        # os.path.basename берет 'Название.png', а splitext отделяет '.png'
+        file_name = os.path.basename(image_path)
+        clean_name = os.path.splitext(file_name)[0]
 
-try:
-    p_img = doc.add_paragraph(style='image')
-    run = p_img.add_run()
-    # При добавлении картинки лучше указывать только ширину, чтобы сохранить пропорции
-    run.add_picture('BongoCat_cugDoJ6Ueu.png', width=available_width)
-    doc.add_paragraph("Картинка 1.", style='image')
-    doc.add_paragraph("Конец тестового документа.", style='normalText')
+        with Image.open(image_path) as img:
+            orig_w, orig_h = img.size # Размер в пикселях
+            # Вычисление высоты при заданной ширине
+            # k = целевая_ширина / текущая_ширина
+            ratio = available_width_cm / orig_w
+            scaled_height = orig_h * ratio
+            # Если высота превышает лимит - обрезаем
+            if scaled_height > max_height_cm:
+                # Вычисляем, сколько пикселей по высоте соответствуют лимиту в 21 см
+                # h_px = max_height_cm / ratio
+                new_h_px = int(max_height_cm / ratio)
+                # Обрезаем: (лево, верх, право, низ)
+                img = img.crop((0, 0, orig_w, new_h_px))
+            # Сохраняем обработанное изображение во временный буфер (в память)
+            # чтобы не создавать лишних файлов на диске
+            image_stream = BytesIO()
+            img.save(image_stream, format='PNG') # Сохраняем как PNG для качества
+            image_stream.seek(0)
 
-    run.add_picture('Картинка.jpg', width=available_width) 
+        p_img = doc.add_paragraph(style=style)
+        run = p_img.add_run()
+        run.add_picture(image_stream, width=Cm(available_width_cm))
 
-except Exception as e:
-    doc.add_paragraph(f"Здесь должна быть картинка (Файл stet2.jpg не найден)", style='normalText')
+        caption_text = f"Рис. {img_counter}. {clean_name}."
+        doc.add_paragraph(caption_text, style=style)
+    except Exception as e:
+        doc.add_paragraph(f"Здесь должен быть\nРис. {img_counter}. {clean_name}.", style='error')
 
+doc.add_paragraph("Ниже следуют картинки.", style='normalText')
+add_image(doc, 'stet2.jpg')
+add_image(doc, 'BongoCat_cugDoJ6Ueu.png')
 doc.add_paragraph("Конец тестового документа.", style='normalText')
 
 doc.save('final_combined_document.docx')
