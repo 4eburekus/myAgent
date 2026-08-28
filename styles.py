@@ -233,17 +233,17 @@ add_image(doc, 'BongoCat_cugDoJ6Ueu.png')
 # ---------------------------------------------------------
 # ------------Работа с таблицами--------------------------
 # ---------------------------------------------------------
-# add_table(doc, name_table, data, widths, styleTableName='tableName', styleTableHeader='tableHeader', styleTableBody='tableBody')
-# doc - переменная документа
-# name_table - название таблицы (проверять, чтобы количество символов было не больше 34)
-# data - двумерный массив данных (проверять, чтобы количество элементов в 0 строке было максимальным среди всех строк)
-# widths - пропорции столбцов (проверять, чтобы количество элементов было равно количеству элементов в 0 строке data)
-# styleTableName='tableName' - стиль документа для названия идущего перед таблицей
-# styleTableHeader='tableHeader'- стиль документа для текста в шапке таблицы
-# styleTableBody='tableBody'- стиль документа для текста в теле таблицы
+"""add_table(doc, name_table, data, widths, styleTableName='tableName', styleTableHeader='tableHeader', styleTableBody='tableBody')
+doc - переменная документа
+name_table - название таблицы (проверять, чтобы количество символов было не больше 34)
+data - двумерный массив данных (проверять, чтобы количество элементов в 0 строке было максимальным среди всех строк)
+widths - пропорции столбцов, подаются в формате [Cm(значение), Cm(значение), Cm(значение)] (проверять, чтобы количество элементов было равно количеству элементов в 0 строке data)
+styleTableName='tableName' - стиль документа для названия идущего перед таблицей
+styleTableHeader='tableHeader'- стиль документа для текста в шапке таблицы
+styleTableBody='tableBody'- стиль документа для текста в теле таблицы"""
 
-from docx.enum.table import WD_ALIGN_VERTICAL
-# --- 1. СТИЛИ ДЛЯ ТЕКСТА ВНУТРИ ТАБЛИЦЫ ---
+# from docx.enum.table import WD_ALIGN_VERTICAL
+# # --- 1. СТИЛИ ДЛЯ ТЕКСТА ВНУТРИ ТАБЛИЦЫ ---
 # Стиль для шапки таблицы
 t_header = styles.add_style('tableHeader', WD_STYLE_TYPE.PARAGRAPH)
 t_header.font.name = 'Times New Roman'
@@ -269,92 +269,136 @@ t_name.next_paragraph_style = styles['Normal']
 t_name.paragraph_format.space_before = Pt(0)
 t_name.paragraph_format.space_after = Pt(0)
 
-doc.add_paragraph(f"Таб. 1. Табличка.", style='tableName')
 
-# --- 2. СОЗДАНИЕ ТАБЛИЦЫ ---
-# Данные для теста
-data = [
-    ["№", "Наименование параметра", "Значение"], # Эта строка - шапка таблицы
-    ["1", "Скорость обработки Скорость обработки Скорость обработки Скорость обработки Скорость обработки Скорость обработки Скорость обработки Скорость обработки Скорость обработки Скорость обработки Скорость обработки ", "150 км/ч"],
-    ["2", "Температура среды", "+22 °C"],
-    ["3", "Давление в системе", "101 кПа"],
-]
-# Создаем таблицу
-table = doc.add_table(rows=len(data), cols=len(data[0]))
-table.style = 'Table Grid' # Базовая сетка
-table.allow_autofit = False 
-# Установка пропорций столбцов
-widths = [Cm(1), Cm(4), Cm(1)]
-for i, width in enumerate(widths):
-    for cell in table.columns[i].cells:
-        cell.width = width
 
-# --- 3. ЗАПОЛНЕНИЕ И ФОРМАТИРОВАНИЕ ---
-for r_idx, row_data in enumerate(data):
-    for c_idx, text in enumerate(row_data):
-        cell = table.cell(r_idx, c_idx)
-        cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
-        
-        # Очищаем ячейку и добавляем параграф с нужным стилем
-        p = cell.paragraphs[0]
-        p.text = text
-        
-        if r_idx == 0:
-            # Оформляем шапку
-            p.style = 'tableHeader'
-            r_idx_color = 'E6E6E6'
-            tcPr = cell._tc.get_or_add_tcPr()
-            shd = OxmlElement('w:shd')
-            shd.set(qn('w:val'), 'clear')
-            shd.set(qn('w:color'), 'auto')
-            shd.set(qn('w:fill'), r_idx_color)
-            tcPr.append(shd)
-            
-        else:
-            # Оформляем тело
-            p.style = 'tableBody'
-
-# --- 4. ПРИВЯЗКА К ПОЛЯМ ---
-# Чтобы таблица с отрицательным отступом -1см стояла ровно там же, где ваш текст normalText:
-
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
-from docx.shared import Cm
-
-left_indent_twips=-567
-total_width_twips=10064
-
-tblPr = table._element.xpath('w:tblPr')[0]
-# 1. Настраиваем левый отступ (tblInd)
-# Удаляем старый, если есть
-indents = tblPr.xpath('w:tblInd')
-if indents:
-    tblPr.remove(indents[0])
-
-tblInd = OxmlElement('w:tblInd')
-tblInd.set(qn('w:w'), str(left_indent_twips))
-tblInd.set(qn('w:type'), 'dxa')
-tblPr.append(tblInd)
-
-# 2. Настраиваем ширину таблицы (tblW)
-# Чтобы таблица "дотянулась" до правого края, 
-# её ширина должна быть больше стандартной ширины страницы.
-widths = tblPr.xpath('w:tblW')
-if widths:
-    tblPr.remove(widths[0])
+from docx.enum.table import WD_ALIGN_VERTICAL
+# Глобальный счетчик таблиц
+table_counter = 0
+def add_table(doc, name_table, data, widths, 
+              styleTableName='tableName', 
+              styleTableHeader='tableHeader', 
+              styleTableBody='tableBody'):
+    """
+    Добавляет таблицу в документ с проверками и сложным форматированием.
+    """
+    global table_counter
+    table_counter += 1
     
-tblW = OxmlElement('w:tblW')
-tblW.set(qn('w:w'), str(total_width_twips))
-tblW.set(qn('w:type'), 'dxa')
-tblPr.append(tblW)
+    try:
+        # --- 1. ПРОВЕРКИ (VALIDATION) ---
+        
+        # Проверка длины названия (не более 34 символов)
+        if len(name_table) > 34:
+            raise ValueError(f"Название таблицы слишком длинное ({len(name_table)} симв.). Макс: 34.")
+            
+        # Проверка структуры данных (0-я строка должна быть самой длинной или равной остальным)
+        max_row_len = max(len(row) for row in data)
+        if len(data[0]) < max_row_len:
+            raise ValueError("Количество элементов в заголовочной строке (data[0]) должно быть максимальным.")
+            
+        # Проверка количества пропорций столбцов
+        if len(widths) != len(data[0]):
+            raise ValueError(f"Количество ширин ({len(widths)}) не совпадает с количеством столбцов ({len(data[0])}).")
 
-# 3. Фиксируем макет таблицы (чтобы она не сжималась по контенту)
-layouts = tblPr.xpath('w:tblLayout')
-if layouts:
-    tblPr.remove(layouts[0])
-tblLayout = OxmlElement('w:tblLayout')
-tblLayout.set(qn('w:type'), 'fixed')
-tblPr.append(tblLayout)
+        # --- 2. ДОБАВЛЕНИЕ НАЗВАНИЯ ТАБЛИЦЫ ---
+        doc.add_paragraph(f"Таб. {table_counter}. {name_table}.", style=styleTableName)
+
+        # --- 3. СОЗДАНИЕ ТАБЛИЦЫ ---
+        table = doc.add_table(rows=len(data), cols=len(data[0]))
+        table.style = 'Table Grid'
+        table.allow_autofit = False 
+
+        # Установка ширин столбцов (из аргумента widths)
+        for i, width_val in enumerate(widths):
+            for cell in table.columns[i].cells:
+                cell.width = width_val
+
+        # --- 4. ЗАПОЛНЕНИЕ ДАННЫМИ И СТИЛИЗАЦИЯ ЯЧЕЕК ---
+        for r_idx, row_data in enumerate(data):
+            for c_idx, text in enumerate(row_data):
+                cell = table.cell(r_idx, c_idx)
+                cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+                
+                # Очищаем ячейку и вставляем параграф
+                p = cell.paragraphs[0]
+                p.text = str(text)
+                
+                if r_idx == 0:
+                    # Оформляем шапку
+                    p.style = styleTableHeader
+                    # Заливка шапки (E6E6E6)
+                    tcPr = cell._tc.get_or_add_tcPr()
+                    shd = OxmlElement('w:shd')
+                    shd.set(qn('w:val'), 'clear')
+                    shd.set(qn('w:color'), 'auto')
+                    shd.set(qn('w:fill'), 'E6E6E6')
+                    tcPr.append(shd)
+                else:
+                    # Оформляем тело
+                    p.style = styleTableBody
+
+        # --- 5. XML-НАСТРОЙКА ГРАНИЦ (РАСТЯГИВАНИЕ) ---
+        # Настройки для соответствия normalText (отступ -1см, ширина на все поля)
+        left_indent_twips = -567
+        total_width_twips = 10064
+
+        tblPr = table._element.xpath('w:tblPr')[0]
+        
+        # Установка tblInd (Левый отступ)
+        indents = tblPr.xpath('w:tblInd')
+        if indents: tblPr.remove(indents[0])
+        tblInd = OxmlElement('w:tblInd')
+        tblInd.set(qn('w:w'), str(left_indent_twips))
+        tblInd.set(qn('w:type'), 'dxa')
+        tblPr.append(tblInd)
+
+        # Установка tblW (Общая фиксированная ширина)
+        t_widths = tblPr.xpath('w:tblW')
+        if t_widths: tblPr.remove(t_widths[0])
+        tblW = OxmlElement('w:tblW')
+        tblW.set(qn('w:w'), str(total_width_twips))
+        tblW.set(qn('w:type'), 'dxa')
+        tblPr.append(tblW)
+
+        # Установка tblLayout (Фиксированный макет)
+        layouts = tblPr.xpath('w:tblLayout')
+        if layouts: tblPr.remove(layouts[0])
+        tblLayout = OxmlElement('w:tblLayout')
+        tblLayout.set(qn('w:type'), 'fixed')
+        tblPr.append(tblLayout)
+
+    except Exception as e:
+        # В случае ошибки выводим информативный текст в документ
+        error_p = doc.add_paragraph(style='error')
+        run = error_p.add_run(f"ОШИБКА ТАБЛИЦЫ: {str(e)}\n")
+        run.bold = True
+        error_p.add_run(f"Таб. {table_counter}. {name_table}")
+
+# --- ТЕСТОВЫЙ ВЫЗОВ ---
+
+# Данные
+my_data = [
+    ["№", "Параметр", "Значение"],
+    ["1", "Длина кабеля", "50 м"],
+    ["2", "Сопротивление", "0.5 Ом"]
+]
+
+# Ширины (в сумме должны коррелировать с общей шириной для красоты)
+my_widths = [Cm(1), Cm(12.25), Cm(4)] 
+# Вызов функции
+add_table(doc, "Технические характеристики", my_data, my_widths)
+
+add_table(doc, "Технические характеристики", my_data, my_widths)
+
+
+
+
+
+
+
+
+
+
 
 
 
