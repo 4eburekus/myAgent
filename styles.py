@@ -230,28 +230,20 @@ add_image(doc, 'BongoCat_cugDoJ6Ueu.png')
 
 
 
-
 # ---------------------------------------------------------
 # ------------Работа с таблицами--------------------------
 # ---------------------------------------------------------
-
+# add_table(doc, name_table, data, widths, styleTableName='tableName', styleTableHeader='tableHeader', styleTableBody='tableBody')
+# doc - переменная документа
+# name_table - название таблицы (проверять, чтобы количество символов было не больше 34)
+# data - двумерный массив данных (проверять, чтобы количество элементов в 0 строке было максимальным среди всех строк)
+# widths - пропорции столбцов (проверять, чтобы количество элементов было равно количеству элементов в 0 строке data)
+# styleTableName='tableName' - стиль документа для названия идущего перед таблицей
+# styleTableHeader='tableHeader'- стиль документа для текста в шапке таблицы
+# styleTableBody='tableBody'- стиль документа для текста в теле таблицы
 
 from docx.enum.table import WD_ALIGN_VERTICAL
-
-
-# --- Функция для закраски фона ячеек ---
-def set_cell_shading(cell, color):
-    """color: строка 'RRGGBB', например 'D9D9D9'"""
-    tcPr = cell._tc.get_or_add_tcPr()
-    shd = OxmlElement('w:shd')
-    shd.set(qn('w:val'), 'clear')
-    shd.set(qn('w:color'), 'auto')
-    shd.set(qn('w:fill'), color)
-    tcPr.append(shd)
-
-
 # --- 1. СТИЛИ ДЛЯ ТЕКСТА ВНУТРИ ТАБЛИЦЫ ---
-
 # Стиль для шапки таблицы
 t_header = styles.add_style('tableHeader', WD_STYLE_TYPE.PARAGRAPH)
 t_header.font.name = 'Times New Roman'
@@ -260,7 +252,6 @@ t_header.font.bold = True
 t_header.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
 t_header.paragraph_format.space_before = Pt(0)
 t_header.paragraph_format.space_after = Pt(0)
-
 # Стиль для обычных ячеек
 t_body = styles.add_style('tableBody', WD_STYLE_TYPE.PARAGRAPH)
 t_body.font.name = 'Times New Roman'
@@ -268,35 +259,37 @@ t_body.font.size = Pt(12)
 t_body.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
 t_body.paragraph_format.space_before = Pt(2)
 t_body.paragraph_format.space_after = Pt(2)
+# Название таблицы
+t_name = styles.add_style('tableName', WD_STYLE_TYPE.PARAGRAPH)
+t_name.base_style = styles['Normal']
+t_name.font.name = 'Times New Roman'
+t_name.font.size = Pt(14)
+t_name.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+t_name.next_paragraph_style = styles['Normal']
+t_name.paragraph_format.space_before = Pt(0)
+t_name.paragraph_format.space_after = Pt(0)
+
+doc.add_paragraph(f"Таб. 1. Табличка.", style='tableName')
 
 # --- 2. СОЗДАНИЕ ТАБЛИЦЫ ---
-
 # Данные для теста
 data = [
-    ["№", "Наименование параметра", "Значение", "Примечание"], # Эта строка - шапка таблицы
-    ["1", "Скорость обработки", "150 км/ч"],
-    ["2", "Температура среды", "+22 °C", "Стабильно"],
-    ["3", "Давление в системе", "101 кПа", "Оптимально"],
+    ["№", "Наименование параметра", "Значение"], # Эта строка - шапка таблицы
+    ["1", "Скорость обработки Скорость обработки Скорость обработки Скорость обработки Скорость обработки Скорость обработки Скорость обработки Скорость обработки Скорость обработки Скорость обработки Скорость обработки ", "150 км/ч"],
+    ["2", "Температура среды", "+22 °C"],
+    ["3", "Давление в системе", "101 кПа"],
 ]
-
 # Создаем таблицу
 table = doc.add_table(rows=len(data), cols=len(data[0]))
 table.style = 'Table Grid' # Базовая сетка
-
-# Настройка ширины всей таблицы
-# Учитывая ваш left_indent = -1см, мы можем сделать таблицу шире стандартной.
-# Стандартная область печати ~16.5см. С вашими правками сделаем 18см.
 table.allow_autofit = False 
-total_width = Cm(18)
-
-# Установка пропорций столбцов (в процентах от 18см)
-widths = [Cm(1), Cm(7), Cm(4), Cm(6)]
+# Установка пропорций столбцов
+widths = [Cm(1), Cm(4), Cm(1)]
 for i, width in enumerate(widths):
     for cell in table.columns[i].cells:
         cell.width = width
 
 # --- 3. ЗАПОЛНЕНИЕ И ФОРМАТИРОВАНИЕ ---
-
 for r_idx, row_data in enumerate(data):
     for c_idx, text in enumerate(row_data):
         cell = table.cell(r_idx, c_idx)
@@ -309,46 +302,59 @@ for r_idx, row_data in enumerate(data):
         if r_idx == 0:
             # Оформляем шапку
             p.style = 'tableHeader'
-            set_cell_shading(cell, 'E6E6E6') # Светло-серый фон
+            r_idx_color = 'E6E6E6'
+            tcPr = cell._tc.get_or_add_tcPr()
+            shd = OxmlElement('w:shd')
+            shd.set(qn('w:val'), 'clear')
+            shd.set(qn('w:color'), 'auto')
+            shd.set(qn('w:fill'), r_idx_color)
+            tcPr.append(shd)
+            
         else:
             # Оформляем тело
             p.style = 'tableBody'
-            if c_idx == 0 or c_idx == 2: # Центрируем № и Значение
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
 # --- 4. ПРИВЯЗКА К ПОЛЯМ ---
 # Чтобы таблица с отрицательным отступом -1см стояла ровно там же, где ваш текст normalText:
-tbl = table._tbl
-tblPr = tbl.tblPr # Прямой доступ к свойствам
-if tblPr is None:
-    tblPr = OxmlElement('w:tblPr')
-    tbl.insert(0, tblPr)
 
-# Установка отступа
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.shared import Cm
+
+left_indent_twips=-567
+total_width_twips=10064
+
+tblPr = table._element.xpath('w:tblPr')[0]
+# 1. Настраиваем левый отступ (tblInd)
+# Удаляем старый, если есть
+indents = tblPr.xpath('w:tblInd')
+if indents:
+    tblPr.remove(indents[0])
+
 tblInd = OxmlElement('w:tblInd')
-tblInd.set(qn('w:w'), '-567') # -1 см в твипах (1 см = 567 twips)
+tblInd.set(qn('w:w'), str(left_indent_twips))
 tblInd.set(qn('w:type'), 'dxa')
 tblPr.append(tblInd)
 
+# 2. Настраиваем ширину таблицы (tblW)
+# Чтобы таблица "дотянулась" до правого края, 
+# её ширина должна быть больше стандартной ширины страницы.
+widths = tblPr.xpath('w:tblW')
+if widths:
+    tblPr.remove(widths[0])
+    
+tblW = OxmlElement('w:tblW')
+tblW.set(qn('w:w'), str(total_width_twips))
+tblW.set(qn('w:type'), 'dxa')
+tblPr.append(tblW)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+# 3. Фиксируем макет таблицы (чтобы она не сжималась по контенту)
+layouts = tblPr.xpath('w:tblLayout')
+if layouts:
+    tblPr.remove(layouts[0])
+tblLayout = OxmlElement('w:tblLayout')
+tblLayout.set(qn('w:type'), 'fixed')
+tblPr.append(tblLayout)
 
 
 
