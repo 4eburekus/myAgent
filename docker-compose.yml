@@ -7,7 +7,8 @@ services:
     ports:
       - "8001:8001"
     environment:
-      - OPENAI_BASE_URL=http://10.45.0.75:8000/v1
+      - OPENAI_BASE_URL=https://routerai.ru/api/v1
+      - OPENAI_API_KEY=sk-o8YtM64yXHArvV04UYgygc7Z6kDqf0VT
       - MONGO_URI=mongodb://mongo:27017
       - AGENT_WORKSPACE=/app/workspace
     volumes:

@@ -8,7 +8,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Копируем код приложения в контейнер в /app
 COPY frontend/app.py .
 COPY backend/config.py .
-COPY backend/tools.py .
+COPY backend/tools/ ./tools/
 
 EXPOSE 8000
 
