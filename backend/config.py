@@ -59,6 +59,7 @@ agent = Agent(
         "'run_console_command' для работы с файлами. (ls, cat, cp, mv, mkdir, touch, echo, find, grep, wc, head, tail, pwd, date, uptime, chmod, chown, touch, ln, du, stat, file, readlink, basename, dirname). Все файлы строго внутри /app/workspace.\n"
         "'fill_docx_fields' для заполнения полей в .docx-шаблоне данными из файла-источника (template, source_file — имена файлов в /app/workspace).\n"
         "'read_excel' для чтения Excel-файлов (.xlsx/.xls), 'create_excel' для создания .xlsx, 'edit_excel' для редактирования Excel (set_cell, add_row, add_column, update_row, clear_cell, rename_sheet).\n"
+        "'md_to_docx' для конвертации Markdown-отчёта (.md) в .docx с форматированием по стилям (заголовки, абзацы, код, картинки, списки, таблицы).\n"
         "'agent_notes' для сохранения ключевой информации."
     ),
     retries=2  # количество повторных попыток при ошибке

@@ -72,7 +72,7 @@ def run_console_command(ctx: RunContext[AssistantDeps], command: str) -> str:
     - Путь: должен начинаться с /app/workspace или быть относительным (без ..)
     """
     # Импортируем функцию безопасности из sandbox.py
-    from sandbox import run_console_command
+    from .sandbox import run_console_command
     result = run_console_command(command)
     return f"Результат выполнения команды: {result}"
 
@@ -159,7 +159,7 @@ async def fill_docx_fields(ctx: RunContext[AssistantDeps], template: str, source
     
     Возвращает отчёт: сколько полей найдено и заполнено, что именно вставлено."""
     import os
-    from docx_fields import fill_docx_fields as _fill
+    from .docx_fields import fill_docx_fields as _fill
 
     workspace = os.getenv("AGENT_WORKSPACE", "/app/workspace")
 
@@ -184,7 +184,7 @@ def read_excel(ctx: RunContext[AssistantDeps], filename: str, sheet: str = "", m
     
     Возвращает содержимое в виде текстовой таблицы: лист, количество строк/колонок,
     заголовки и строки данных."""
-    from excel_utils import read_excel as _read
+    from .excel_utils import read_excel as _read
     return _read(filename, sheet, max_rows)
 
 
@@ -199,7 +199,7 @@ def create_excel(ctx: RunContext[AssistantDeps], filename: str, headers: list, r
     - sheet_name: название листа (по умолчанию 'Лист1')
     
     Заголовки делаются жирными, ширина колонок подстраивается автоматически."""
-    from excel_utils import create_excel as _create
+    from .excel_utils import create_excel as _create
     return _create(filename, headers, rows, sheet_name)
 
 
@@ -222,8 +222,46 @@ def edit_excel(ctx: RunContext[AssistantDeps], filename: str, action: str, sheet
     
     При редактировании форматирование остальных ячеек сохраняется. Файлы .xls
     конвертируются в .xlsx (результат сохраняется рядом с тем же именем, но .xlsx)."""
-    from excel_utils import edit_excel as _edit
+    from .excel_utils import edit_excel as _edit
     return _edit(filename, action, sheet, **kwargs)
+
+
+@agent.tool
+def md_to_docx(ctx: RunContext[AssistantDeps], filename: str, out_filename: str = "") -> str:
+    """Преобразует Markdown-отчёт в .docx с красивым форматированием.
+    
+    Аргументы:
+    - filename: имя .md файла в папке /app/workspace (например 'отчет.md')
+    - out_filename: имя результирующего .docx (по умолчанию <имя>.docx, перезаписывается)
+    
+    Поддерживаемые конструкции Markdown (соответствие стилям):
+    - # / ## / ### — заголовки 1-3 уровней
+    - обычные абзацы (разделены пустыми строками)
+    - ``` код ``` — блоки кода с рамкой
+    - ![](путь/к/картинке.jpg) — изображения с подписью 'Рис. N'
+    - 1. / * / - — вложенные списки (большой/средний/малый)
+    - таблицы вида:
+        | Название таблицы
+        ||Столбец1|Столбец2|Столбец3
+        |-|-|-|----|
+        |Строка1|Ячейка1|Ячейка2|Ячейка3
+    
+    Стили берутся из docx_styles.py (соответствие instruction.md)."""
+    import os
+    from .md_to_docx import md_to_docx as _convert
+
+    workspace = os.getenv("AGENT_WORKSPACE", "/app/workspace")
+
+    md_path = os.path.join(workspace, os.path.basename(filename))
+    if not os.path.exists(md_path):
+        return f"Ошибка: файл '{filename}' не найден."
+
+    if not out_filename:
+        base = os.path.splitext(os.path.basename(filename))[0]
+        out_filename = base + ".docx"
+    out_path = os.path.join(workspace, os.path.basename(out_filename))
+
+    return _convert(md_path, out_path)
 
 
 
