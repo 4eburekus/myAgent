@@ -15,7 +15,7 @@ import re
 from docx import Document
 from docx.shared import Cm
 
-from docx_styles import add_styles, add_image, add_table
+from .docx_styles import add_styles, add_image, add_table
 
 
 # ---------------------------------------------------------------

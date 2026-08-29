@@ -7,13 +7,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Приложение
 COPY backend/config.py .
-COPY backend/tools.py .
 COPY backend/server.py .
-COPY backend/sandbox.py .
-COPY backend/docx_fields.py .
-COPY backend/excel_utils.py .
-COPY backend/docx_styles.py .
-COPY backend/md_to_docx.py .
+COPY backend/tools/ ./tools/
 
 EXPOSE 8001
 

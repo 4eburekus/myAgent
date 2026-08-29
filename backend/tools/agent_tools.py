@@ -72,7 +72,7 @@ def run_console_command(ctx: RunContext[AssistantDeps], command: str) -> str:
     - Путь: должен начинаться с /app/workspace или быть относительным (без ..)
     """
     # Импортируем функцию безопасности из sandbox.py
-    from sandbox import run_console_command
+    from .sandbox import run_console_command
     result = run_console_command(command)
     return f"Результат выполнения команды: {result}"
 
@@ -159,7 +159,7 @@ async def fill_docx_fields(ctx: RunContext[AssistantDeps], template: str, source
     
     Возвращает отчёт: сколько полей найдено и заполнено, что именно вставлено."""
     import os
-    from docx_fields import fill_docx_fields as _fill
+    from .docx_fields import fill_docx_fields as _fill
 
     workspace = os.getenv("AGENT_WORKSPACE", "/app/workspace")
 
@@ -184,7 +184,7 @@ def read_excel(ctx: RunContext[AssistantDeps], filename: str, sheet: str = "", m
     
     Возвращает содержимое в виде текстовой таблицы: лист, количество строк/колонок,
     заголовки и строки данных."""
-    from excel_utils import read_excel as _read
+    from .excel_utils import read_excel as _read
     return _read(filename, sheet, max_rows)
 
 
@@ -199,7 +199,7 @@ def create_excel(ctx: RunContext[AssistantDeps], filename: str, headers: list, r
     - sheet_name: название листа (по умолчанию 'Лист1')
     
     Заголовки делаются жирными, ширина колонок подстраивается автоматически."""
-    from excel_utils import create_excel as _create
+    from .excel_utils import create_excel as _create
     return _create(filename, headers, rows, sheet_name)
 
 
@@ -222,7 +222,7 @@ def edit_excel(ctx: RunContext[AssistantDeps], filename: str, action: str, sheet
     
     При редактировании форматирование остальных ячеек сохраняется. Файлы .xls
     конвертируются в .xlsx (результат сохраняется рядом с тем же именем, но .xlsx)."""
-    from excel_utils import edit_excel as _edit
+    from .excel_utils import edit_excel as _edit
     return _edit(filename, action, sheet, **kwargs)
 
 
@@ -248,7 +248,7 @@ def md_to_docx(ctx: RunContext[AssistantDeps], filename: str, out_filename: str 
     
     Стили берутся из docx_styles.py (соответствие instruction.md)."""
     import os
-    from md_to_docx import md_to_docx as _convert
+    from .md_to_docx import md_to_docx as _convert
 
     workspace = os.getenv("AGENT_WORKSPACE", "/app/workspace")
 
