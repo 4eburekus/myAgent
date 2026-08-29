@@ -226,5 +226,43 @@ def edit_excel(ctx: RunContext[AssistantDeps], filename: str, action: str, sheet
     return _edit(filename, action, sheet, **kwargs)
 
 
+@agent.tool
+def md_to_docx(ctx: RunContext[AssistantDeps], filename: str, out_filename: str = "") -> str:
+    """Преобразует Markdown-отчёт в .docx с красивым форматированием.
+    
+    Аргументы:
+    - filename: имя .md файла в папке /app/workspace (например 'отчет.md')
+    - out_filename: имя результирующего .docx (по умолчанию <имя>.docx, перезаписывается)
+    
+    Поддерживаемые конструкции Markdown (соответствие стилям):
+    - # / ## / ### — заголовки 1-3 уровней
+    - обычные абзацы (разделены пустыми строками)
+    - ``` код ``` — блоки кода с рамкой
+    - ![](путь/к/картинке.jpg) — изображения с подписью 'Рис. N'
+    - 1. / * / - — вложенные списки (большой/средний/малый)
+    - таблицы вида:
+        | Название таблицы
+        ||Столбец1|Столбец2|Столбец3
+        |-|-|-|----|
+        |Строка1|Ячейка1|Ячейка2|Ячейка3
+    
+    Стили берутся из docx_styles.py (соответствие instruction.md)."""
+    import os
+    from md_to_docx import md_to_docx as _convert
+
+    workspace = os.getenv("AGENT_WORKSPACE", "/app/workspace")
+
+    md_path = os.path.join(workspace, os.path.basename(filename))
+    if not os.path.exists(md_path):
+        return f"Ошибка: файл '{filename}' не найден."
+
+    if not out_filename:
+        base = os.path.splitext(os.path.basename(filename))[0]
+        out_filename = base + ".docx"
+    out_path = os.path.join(workspace, os.path.basename(out_filename))
+
+    return _convert(md_path, out_path)
+
+
 
 
