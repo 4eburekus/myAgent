@@ -21,8 +21,20 @@ from docx.enum.table import WD_ALIGN_VERTICAL
 
 
 def add_styles(doc: Document) -> None:
-    """Определяет все стили документа (копия из styles.py)."""
+    """Определяет все стили документа (копия из styles.py).
+
+    Идемпотентна: если стили уже добавлены ранее (маркер — наличие 'normalText'),
+    повторно не добавляет. Это позволяет вызывать её для уже существующих
+    документов (например, перед вставкой титульника).
+    """
     styles = doc.styles
+
+    # Уже добавлены — выходим
+    try:
+        styles['normalText']
+        return
+    except KeyError:
+        pass
 
     # -----------------------Обычный текст-----------------------------
     nt = styles.add_style('normalText', WD_STYLE_TYPE.PARAGRAPH)
@@ -158,6 +170,32 @@ def add_styles(doc: Document) -> None:
     er.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
     er.next_paragraph_style = styles['Normal']
 
+    # -----------------------Для титульника-----------------------------
+    tt1 = styles.add_style('titleText1', WD_STYLE_TYPE.PARAGRAPH)
+    tt1.font.name = 'Times New Roman'
+    tt1.font.size = Pt(14)
+    tt1.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    tt1.paragraph_format.line_spacing = 1.5
+    tt1.paragraph_format.space_before = Pt(0)
+    tt1.paragraph_format.space_after = Pt(0)
+
+    tt2 = styles.add_style('titleText2', WD_STYLE_TYPE.PARAGRAPH)
+    tt2.font.name = 'Times New Roman'
+    tt2.font.size = Pt(14)
+    tt2.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    tt2.paragraph_format.line_spacing = 1.5
+    tt2.paragraph_format.space_before = Pt(12)
+    tt2.paragraph_format.space_after = Pt(6)
+    tt2.font.bold = True
+
+    tt3 = styles.add_style('titleText3', WD_STYLE_TYPE.PARAGRAPH)
+    tt3.font.name = 'Times New Roman'
+    tt3.font.size = Pt(14)
+    tt3.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    tt3.paragraph_format.line_spacing = 1.5
+    tt3.paragraph_format.space_before = Pt(0)
+    tt3.paragraph_format.space_after = Pt(0)
+
 
 def add_image(doc: Document, image_path: str, img_counter: int,
               available_width_cm: float = 17.25, max_height_cm: float = 21.0,
@@ -282,3 +320,106 @@ def add_table(doc: Document, name_table: str, data, widths,
         error_p.add_run(f"Таб. {table_counter}. {name_table}")
 
     return table_counter
+
+
+def add_title_page(doc: Document,
+                   discipline: str, workName: str, workTheme: str,
+                   positionInspector: str, inspector: str,
+                   workers: list, workersGroup: str = "23-ИСбо-4б",
+                   insert_at_beginning: bool = False) -> None:
+    """Добавляет в документ титульную страницу.
+
+    Аргументы:
+    - doc: объект документа (python-docx)
+    - discipline: название дисциплины
+    - workName: название работы (например: "Лабораторная работа №3")
+    - workTheme: тема работы
+    - positionInspector: должность проверяющего
+    - inspector: ФИО проверяющего
+    - workers: список людей, выполняющих работу (например: ["Кузнецов Павел Михайлович", "Пылова Виктория Дмитриевна"])
+    - workersGroup: название группы
+    - insert_at_beginning: если True — титульник вставляется в НАЧАЛО документа
+      (даже если документ уже содержит контент). Иначе — добавляется в конец.
+    """
+    # Если документ пустой или добавляем в конец — собираем прямо в нём
+    if not insert_at_beginning or not doc.paragraphs:
+        _add_title_paragraphs(doc, discipline, workName, workTheme,
+                              positionInspector, inspector, workers, workersGroup)
+        return
+
+    # Вставка в начало существующего документа: собираем титульник во временном
+    # документе (стили уже есть в целевом — они идемпотентны), затем переносим
+    # XML-элементы в начало целевого документа.
+    temp = Document()
+    add_styles(temp)
+    _add_title_paragraphs(temp, discipline, workName, workTheme,
+                          positionInspector, inspector, workers, workersGroup)
+
+    target_body = doc.element.body
+    # Находим первый дочерний элемент body (не sectPr — свойства секции)
+    first_child = None
+    for child in target_body:
+        if child.tag != qn('w:sectPr'):
+            first_child = child
+            break
+
+    for el in list(temp.element.body):
+        if el.tag == qn('w:sectPr'):
+            continue  # свойства секции временного документа не переносим
+        if first_child is not None:
+            first_child.addprevious(el)
+        else:
+            target_body.append(el)
+
+
+def _add_title_paragraphs(doc: Document,
+                          discipline: str, workName: str, workTheme: str,
+                          positionInspector: str, inspector: str,
+                          workers: list, workersGroup: str) -> None:
+    """Внутренняя функция: добавляет абзацы титульника в конец doc (как в styles.py)."""
+    import datetime
+
+    # --- 1. ШАПКА (Университет и дисциплина) ---
+    header_text = (
+        "МИНОБРНАУКИ РОССИИ\n"
+        "Федеральное государственное бюджетное образовательное учреждение высшего образования\n"
+        "«Костромской государственный университет» (КГУ)\n"
+        "Институт Высшая ИТ-Школа\n"
+        "Кафедра информационных систем и технологий\n"
+        "Направление подготовки 09.03.02\n"
+        "Профиль Поддержка и развитие IT-инфраструктуры компаний\n"
+        f"Дисциплина «{discipline}»"
+    )
+    doc.add_paragraph(header_text, style="titleText1")
+
+    # --- 2. НАЗВАНИЕ РАБОТЫ ---
+    doc.add_paragraph(f"{workName}\n{workTheme}", style="titleText2")
+
+    # --- 3. РАСПОРКА (Пустые параграфы) ---
+    base_spacer = 8
+    dynamic_spacer = base_spacer - len(workers)
+    # Страховка, чтобы не уйти в отрицательное число
+    if dynamic_spacer <= 1:
+        dynamic_spacer = 1
+    else:
+        doc.add_paragraph("\n" * (dynamic_spacer - 1))
+
+    # --- 4. БЛОК ИСПОЛНИТЕЛЕЙ И ПРОВЕРЯЮЩЕГО ---
+    # Формируем список студентов циклом (запятая после каждого, кроме последнего)
+    workers_str = ",\n".join(workers)
+    info_block = (
+        f"Выполнили студенты\n"
+        f"{workers_str}\n"
+        f"Группа {workersGroup}\n"
+        f"Проверил {positionInspector}\n"
+        f"{inspector}\n"
+        f"Оценка __________________________\n"
+        f"Подпись преподавателя ____________"
+    )
+    doc.add_paragraph(info_block, style="titleText3")
+
+    # --- 5. НИЗ (Город и год) ---
+    current_year = datetime.datetime.now().year
+    doc.add_paragraph(f"Кострома\n{current_year}", style="titleText1")
+    # Разрыв страницы, чтобы следующий текст начался с нового листа
+    doc.add_page_break()

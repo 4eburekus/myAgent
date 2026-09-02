@@ -15,7 +15,7 @@ import re
 from docx import Document
 from docx.shared import Cm
 
-from .docx_styles import add_styles, add_image, add_table
+from .docx_styles import add_styles, add_image, add_table, add_title_page
 
 
 # ---------------------------------------------------------------
@@ -42,6 +42,7 @@ def parse_md(text: str) -> list:
     {'type': 'image', 'path': str}
     {'type': 'list_big'|'list_mid'|'list_small', 'text': str}   # включая маркер
     {'type': 'table', 'name': str, 'data': [[...], ...]}
+    {'type': 'title_page', **поля титульника}  # из !-директив
     """
     lines = text.split('\n')
     blocks = []
@@ -118,6 +119,15 @@ def parse_md(text: str) -> list:
             i += 1
             continue
 
+        # --- Титульный лист: строки вида !Ключ: Значение ---
+        if stripped.startswith('!'):
+            dir_lines = []
+            while i < n and lines[i].strip().startswith('!'):
+                dir_lines.append(lines[i].strip())
+                i += 1
+            blocks.append(_parse_title_block(dir_lines))
+            continue
+
         # --- Обычный абзац: собираем до пустой строки ---
         para_lines = [stripped]
         i += 1
@@ -165,6 +175,71 @@ def _parse_table(table_lines: list) -> dict:
 
 
 # ---------------------------------------------------------------
+# Парсер титульного листа (!-директивы)
+# ---------------------------------------------------------------
+
+# Маппинг русских ключей из md на имена параметров add_title_page
+TITLE_KEY_MAP = {
+    'Дисциплина': 'discipline',
+    'Работа': 'workName',
+    'Тема': 'workTheme',
+    'Должность проверяющего': 'positionInspector',
+    'Проверяющий': 'inspector',
+    'Выполнили': 'workers',
+    'Группа': 'workersGroup',
+}
+
+
+def _parse_title_block(dir_lines: list) -> dict:
+    """Парсит !-директивы в блок титульного листа.
+
+    Пример:
+    !Титульный_лист                       -> маркер (пропускается)
+    !Дисциплина: Информационная безопасность
+    !Работа: Лабораторная работа №6
+    !Выполнили: Кузнецов Павел Михайлович, Пылова Виктория Дмитриевна
+
+    Возвращает {'type': 'title_page', 'discipline': ..., 'workers': [...], ...}
+    """
+    block = {'type': 'title_page'}
+    missing = []
+
+    for line in dir_lines:
+        s = line.lstrip('!').strip()
+        # Маркер "Титульный_лист" без двоеточия — пропускаем
+        if ':' not in s:
+            continue
+        key_raw, _, value = s.partition(':')
+        key = key_raw.strip()
+        value = value.strip()
+
+        field = TITLE_KEY_MAP.get(key)
+        if not field:
+            continue  # неизвестный ключ игнорируем
+
+        if field == 'workers':
+            # Список через запятую
+            block[field] = [w.strip() for w in value.split(',') if w.strip()]
+        else:
+            block[field] = value
+
+    # Проверяем обязательные поля (по умолчанию — пустые)
+    for field in ('discipline', 'workName', 'workTheme', 'positionInspector',
+                  'inspector', 'workers', 'workersGroup'):
+        if field not in block or block[field] in (None, '', []):
+            if field == 'workers':
+                block.setdefault(field, [])
+            else:
+                block.setdefault(field, '')
+            missing.append(field)
+
+    if missing:
+        block['missing'] = missing
+
+    return block
+
+
+# ---------------------------------------------------------------
 # Вычисление ширин столбцов таблицы
 # ---------------------------------------------------------------
 
@@ -204,7 +279,8 @@ def build_docx(blocks: list, workspace: str) -> tuple:
     table_counter = 0
     stats = {"heading1": 0, "heading2": 0, "heading3": 0,
              "paragraph": 0, "code": 0, "image": 0,
-             "list_big": 0, "list_mid": 0, "list_small": 0, "table": 0}
+             "list_big": 0, "list_mid": 0, "list_small": 0, "table": 0,
+             "title_page": 0}
 
     for block in blocks:
         t = block['type']
@@ -234,6 +310,21 @@ def build_docx(blocks: list, workspace: str) -> tuple:
         elif t == 'table':
             widths = _compute_widths(block['data'])
             table_counter = add_table(doc, block['name'], block['data'], widths, table_counter)
+
+        elif t == 'title_page':
+            # Титульник всегда должен быть в начале документа: если контент уже
+            # есть — вставляем в начало, иначе просто добавляем в конец (пустой doc)
+            add_title_page(
+                doc,
+                discipline=block.get('discipline', ''),
+                workName=block.get('workName', ''),
+                workTheme=block.get('workTheme', ''),
+                positionInspector=block.get('positionInspector', ''),
+                inspector=block.get('inspector', ''),
+                workers=block.get('workers', []),
+                workersGroup=block.get('workersGroup', ''),
+                insert_at_beginning=True,
+            )
 
     return doc, stats
 
@@ -275,6 +366,7 @@ def md_to_docx(md_path: str, out_path: str) -> str:
 
     # Отчёт
     names = {
+        'title_page': 'титульных листов',
         'heading1': 'заголовков 1 ур.', 'heading2': 'заголовков 2 ур.', 'heading3': 'заголовков 3 ур.',
         'paragraph': 'абзацев', 'code': 'блоков кода', 'image': 'картинок',
         'list_big': 'эл. списка (1.)', 'list_mid': 'эл. списка (*)', 'list_small': 'эл. списка (-)',

@@ -264,5 +264,58 @@ def md_to_docx(ctx: RunContext[AssistantDeps], filename: str, out_filename: str 
     return _convert(md_path, out_path)
 
 
+@agent.tool
+def add_title_to_docx(ctx: RunContext[AssistantDeps], filename: str,
+                      discipline: str, workName: str, workTheme: str,
+                      positionInspector: str, inspector: str,
+                      workers: list, workersGroup: str = "23-ИСбо-4б") -> str:
+    """Добавляет титульную страницу в начало существующего .docx файла.
+
+    Аргументы:
+    - filename: имя .docx файла в папке /app/workspace (перезаписывается)
+    - discipline: название дисциплины
+    - workName: название работы (например 'Лабораторная работа №6')
+    - workTheme: тема работы
+    - positionInspector: должность проверяющего
+    - inspector: ФИО проверяющего
+    - workers: список выполнивших (например ['Кузнецов Павел Михайлович', 'Пылова Виктория Дмитриевна'])
+    - workersGroup: название группы (по умолчанию '23-ИСбо-4б')
+
+    Титульник вставляется в НАЧАЛО документа. Существующее содержимое и его
+    форматирование не изменяются — документ открывается, титульник добавляется,
+    файл перезаписывается."""
+    import os
+    from docx import Document
+    from .docx_styles import add_styles, add_title_page
+
+    workspace = os.getenv("AGENT_WORKSPACE", "/app/workspace")
+    filepath = os.path.join(workspace, os.path.basename(filename))
+
+    if not os.path.exists(filepath):
+        return f"Ошибка: файл '{filename}' не найден."
+    if not filename.lower().endswith('.docx'):
+        return "Ошибка: файл должен быть .docx."
+
+    try:
+        doc = Document(filepath)
+        # Добавляем недостающие стили (если документ создан не нами — titleText* отсутствуют)
+        add_styles(doc)
+        add_title_page(
+            doc,
+            discipline=discipline,
+            workName=workName,
+            workTheme=workTheme,
+            positionInspector=positionInspector,
+            inspector=inspector,
+            workers=workers,
+            workersGroup=workersGroup,
+            insert_at_beginning=True,
+        )
+        doc.save(filepath)
+        return f"Титульный лист добавлен в начало '{filename}'."
+    except Exception as e:
+        return f"Ошибка при добавлении титульного листа: {e}"
+
+
 
 
